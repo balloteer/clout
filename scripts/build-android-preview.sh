@@ -5,6 +5,23 @@ set -euo pipefail
 CLOUT_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$CLOUT_PROJECT_ROOT"
 
+# Browser-only .env.local values must never silently select the APK's API.
+export EXPO_NO_DOTENV=1
+export CLOUT_PREVIEW_USB="${CLOUT_PREVIEW_USB:-0}"
+if [[ "$CLOUT_PREVIEW_USB" == "1" ]]; then
+  export EXPO_PUBLIC_API_URL='http://127.0.0.1:8787'
+  echo "Building USB preview: keep the Mac API and adb reverse tcp:8787 tcp:8787 running."
+elif [[ "$CLOUT_PREVIEW_USB" == "0" ]]; then
+  export EXPO_PUBLIC_API_URL="${CLOUT_PREVIEW_API_URL:-}"
+  if [[ -n "$EXPO_PUBLIC_API_URL" && "$EXPO_PUBLIC_API_URL" != https://* ]]; then
+    echo "CLOUT_PREVIEW_API_URL must use HTTPS; use CLOUT_PREVIEW_USB=1 for USB testing." >&2
+    exit 1
+  fi
+else
+  echo "CLOUT_PREVIEW_USB must be 0 or 1." >&2
+  exit 1
+fi
+
 if [[ ! -d node_modules/expo ]]; then
   echo "Install workspace dependencies with npm ci before building." >&2
   exit 1

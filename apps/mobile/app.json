@@ -2,16 +2,24 @@
   "expo": {
     "name": "Clout",
     "slug": "clout",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "scheme": "clout",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/brand/icon.png",
     "android": {
       "package": "app.clout.mobile",
-      "adaptiveIcon": { "foregroundImage": "./assets/brand/icon.png", "backgroundColor": "#FF3D8B" }
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/icon.png",
+        "backgroundColor": "#FF3D8B"
+      },
+      "versionCode": 2
     },
-    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/brand/icon.png" },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/brand/icon.png"
+    },
     "plugins": [
       "expo-router",
       "expo-font",
@@ -24,8 +32,11 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/withPreviewApi.cjs"
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

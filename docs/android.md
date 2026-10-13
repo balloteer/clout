@@ -16,9 +16,19 @@ This produces `artifacts/clout-preview.apk` for ARM64 devices, including Seeker.
 bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk
 ```
 
-Public API, RPC and wallet-identity environment values are bundled at build time. The portable preview is deliberately built with `EXPO_PUBLIC_API_URL=''`: its 50 licensed sample videos play offline, while connected services show their unavailable state. The 30 verified devnet market references are bundled, but quotes, transactions, the mock-SKR faucet, account linking and auto-import need a configured API. A live API must use a reachable HTTPS URL on a phone; `localhost` points to that phone unless an explicit USB development forwarding rule is active. Rebuild after changing public environment values.
+Public API, RPC and wallet-identity environment values are bundled at build time. The build script disables dotenv loading so a browser's `.env.local` cannot silently change the APK. By default its API is blank: 50 bundled samples play offline and the 18 curated videos require internet. Connected services require an API. Use `CLOUT_PREVIEW_API_URL=https://your-api.example bash scripts/build-android-preview.sh` for a reachable HTTPS API. Rebuild after changing public environment values.
 
-Latest verified artifact: **2026-10-13**, **94,153,129 bytes**, SHA-256 `6e6bcc857162d43aa41ab36bbc71580de3ef224e0641ca48c24ad04678629cc7`. The installed emulator package was pulled back and checked against that hash. Evidence and package checks are in `artifacts/android-verification.json`; the normal-font playing screenshot is `artifacts/native-review/final-paged-feed.png`. Warm and cold unsolicited linked-account callbacks reached the safe reconnect screen without claiming success on the immediately preceding candidate; callback code did not change in the final paging-only rebuild.
+The current artifact is a **USB-connected preview**, version **0.1.1 (2)**. It contains the latest Seeker layout, native vertical paging, eye investment action, curated content and daily faucet UI. Reproduce it with:
+
+```bash
+CLOUT_PREVIEW_USB=1 bash scripts/build-android-preview.sh
+bash scripts/android-env.sh adb -s YOUR_SEEKER_SERIAL reverse tcp:8787 tcp:8787
+bash scripts/android-env.sh adb -s YOUR_SEEKER_SERIAL install -r artifacts/clout-preview.apk
+```
+
+Keep the Mac API running and the phone connected by USB for live Supabase/trading/faucet requests. This preview embeds `http://127.0.0.1:8787` and explicitly allows cleartext only to that loopback address; all other destinations retain HTTPS requirements. The Expo plugin removes its network policy when the USB flag is disabled. The APK bundles its JavaScript, so Metro is unnecessary. Public hosting remains separate; unplugging USB prevents API-backed features from working.
+
+Latest rebuilt artifact: **2026-10-13**, **0.1.1 (2)**, **93,963,822 bytes**, SHA-256 `002e12068c3cc5f90928ace4ca307de468425f95eefe6b52d24c670408c29fcc`. Signature verification and 16 KB ZIP alignment pass. It retains the original preview signing certificate, so `adb install -r` updates the existing app without clearing its data. The release bundle was regenerated from current source. Build evidence is `artifacts/android-refresh-build.log`; prior-version metadata is `artifacts/native-review/apk-before-rebuild.json`. Earlier emulator and callback results below are historical unless explicitly repeated for version 0.1.1. The connected physical Seeker was updated in place to version 0.1.1/code 2; its installed APK SHA-256 exactly matches the artifact. USB forwarding for port 8787 is active. Installation evidence is `artifacts/native-review/apk-seeker-installed.json`; the packaged bundle contains the current slogan, official Seeker endpoint and explicit USB API URL. Wallet authorization and signing were not performed on the phone.
 
 ## Isolated macOS ARM64 setup
 
