@@ -10,6 +10,7 @@ import {
   type Comment,
   type IndexedEvent,
   type Post,
+  type PostSummary,
   type Profile,
   type Repository,
   type Session,
@@ -82,6 +83,21 @@ export class MemoryRepository implements Repository {
     return [...this.posts.values()]
       .filter((post) => post.status === 'ready')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 100)
+  }
+  async getPostSummaries(postIds: string[], wallet?: string): Promise<Record<string, PostSummary>> {
+    if (postIds.length > 100) throw new Error('Post summary batch exceeds the feed limit.')
+    const summaries: Record<string, PostSummary> = {}
+    for (const id of postIds) {
+      const post = this.posts.get(id)
+      if (!post) continue
+      summaries[id] = {
+        creator: this.profiles.get(post.creatorWallet) ?? null,
+        likes: await this.likes(id, wallet),
+        commentCount: (await this.listComments(id)).length,
+      }
+    }
+    return summaries
   }
   async listOwnPosts(wallet: string) {
     return [...this.posts.values()]

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import postgres from 'postgres'
+import { databaseTls, databaseCliTlsEnv } from './db-tls.mjs'
 
 export const PROJECT_REF = 'qsboauxywnuhitlpmojw'
 export const MIGRATION = '20261013000133_clout_initial.sql'
@@ -151,9 +152,10 @@ export async function inspectDatabase(sql, tables, migrationName = MIGRATION) {
 
 export function connection(url) {
   return postgres(url.toString(), {
-    ssl: 'verify-full',
+    ssl: databaseTls(url),
     prepare: false,
     max: 1,
+    max_pipeline: 1,
     connect_timeout: 10,
     idle_timeout: 5,
     onnotice: () => {},
@@ -164,6 +166,7 @@ export async function runCli(args, target, workspace) {
   const credentials = target ? cliConnection(target) : null
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, CI: 'true' }
   if (credentials) {
+    Object.assign(env, databaseCliTlsEnv(target.url))
     env.PGPASSWORD = credentials.password
     env.SUPABASE_DB_PASSWORD = credentials.password
   }

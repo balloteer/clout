@@ -93,6 +93,10 @@ test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logou
     assert.equal(comment.status, 201)
     assert.equal(comment.data.comments[0].wallet, login.wallet)
     assert.equal(comment.data.comments[0].earlyBacker, false)
+    const likedFeed = await app.request('/v1/feed', { headers: login.headers })
+    const likedPost = likedFeed.data.posts.find((item: { id: string }) => item.id === post.id)
+    assert.deepEqual(likedPost.likes, { count: 1, liked: true })
+    assert.equal(likedPost.commentCount, 1)
     await app.request(`/v1/profiles/${post.creatorWallet}/follow`, { method: 'POST', headers: login.headers })
     assert.equal(
       (await app.request('/v1/feed?tab=following', { headers: login.headers })).data.posts.length,
@@ -111,6 +115,42 @@ test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logou
     assert.deepEqual(portfolio.data.positions, [])
     await app.request('/v1/auth/logout', { method: 'POST', headers: login.headers })
     assert.equal((await app.request('/v1/me', { headers: login.headers })).status, 401)
+  } finally {
+    await app.close()
+  }
+})
+
+test('HTTP feed and discover hydrate the visible batch without per-post creator requests', async () => {
+  const batches: string[][] = []
+  const app = await fixture(undefined, async (repository) => {
+    const original = repository.getPostSummaries.bind(repository)
+    repository.getPostSummaries = async (ids, wallet) => {
+      batches.push(ids)
+      return original(ids, wallet)
+    }
+    repository.getProfile = async () => {
+      throw new Error('Feed must not issue one creator request per post.')
+    }
+    return {}
+  })
+  try {
+    const feed = await app.request('/v1/feed')
+    assert.equal(feed.status, 200)
+    assert.equal(batches.length, 1)
+    assert.deepEqual(
+      batches[0],
+      feed.data.posts.map((post: { id: string }) => post.id),
+    )
+    assert.ok(feed.data.posts.every((post: { creator: unknown }) => post.creator))
+    const discover = await app.request('/v1/discover?q=nonexistent-caption-unique')
+    assert.equal(discover.status, 200)
+    assert.deepEqual(discover.data.posts, [])
+    assert.deepEqual(batches[1], [])
+    const post = feed.data.posts[0]
+    app.repository.profiles.delete(post.creatorWallet)
+    const missing = await app.request('/v1/feed')
+    assert.equal(missing.status, 200)
+    assert.equal(missing.data.posts.find((item: { id: string }) => item.id === post.id).creator, null)
   } finally {
     await app.close()
   }

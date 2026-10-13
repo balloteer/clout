@@ -1,5 +1,6 @@
 import postgres from 'postgres'
 import { randomUUID } from 'node:crypto'
+import { databaseTls } from '../../../scripts/db-tls.mjs'
 import {
   ApiError,
   newProfile,
@@ -11,24 +12,27 @@ import {
   type Comment,
   type IndexedEvent,
   type Post,
+  type PostSummary,
   type Profile,
   type Repository,
   type Session,
   type TransactionIntent,
 } from './domain.js'
 
-// Direct server connection to Supabase's transaction pooler; no credentials reach the app.
+// Server connection to Supabase's session pooler; no credentials reach the app.
 export class PostgresRepository implements Repository {
   readonly sql: ReturnType<typeof postgres>
   constructor(url: string) {
-    const local = ['localhost', '127.0.0.1', '::1'].includes(new URL(url).hostname)
-    this.sql = postgres(url, {
+    // postgres.js supports max_pipeline at runtime but 3.4.7 omits it from its Options type.
+    const options = {
       max: 5,
+      max_pipeline: 1,
       prepare: false,
-      ssl: local ? false : 'verify-full',
+      ssl: databaseTls(url, { allowLocal: true }),
       idle_timeout: 20,
       connect_timeout: 10,
-    })
+    }
+    this.sql = postgres(url, options)
   }
   async putChallenge(challenge: Challenge) {
     await this
@@ -83,6 +87,30 @@ export class PostgresRepository implements Repository {
     return (
       await this.sql`select data from public.posts where status = 'ready' order by created_at desc limit 100`
     ).map((row) => row.data)
+  }
+  async getPostSummaries(postIds: string[], wallet = ''): Promise<Record<string, PostSummary>> {
+    if (postIds.length > 100) throw new Error('Post summary batch exceeds the feed limit.')
+    if (!postIds.length) return {}
+    const rows = await this.sql`select p.id, creator.data as creator,
+      reaction.total as like_count, coalesce(reaction.liked, false) as liked,
+      (select count(*)::int from (select 1 from public.comments c where c.post_id = p.id limit 100) comments) as comment_count
+      from public.posts p
+      left join public.profiles creator on creator.wallet = p.creator_wallet
+      left join lateral (
+        select count(*)::int as total, bool_or(l.wallet = ${wallet}) as liked
+        from public.likes l where l.post_id = p.id
+      ) reaction on true
+      where p.id = any(${postIds}::text[])`
+    return Object.fromEntries(
+      rows.map((row) => [
+        row.id,
+        {
+          creator: row.creator ?? null,
+          likes: { count: row.like_count, liked: row.liked },
+          commentCount: row.comment_count,
+        },
+      ]),
+    )
   }
   async listOwnPosts(wallet: string): Promise<Post[]> {
     return (

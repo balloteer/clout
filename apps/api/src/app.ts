@@ -10,7 +10,14 @@ import {
 } from '@clout/markets'
 import { Connection, PublicKey } from '@solana/web3.js'
 import { AuthService, walletAddress } from './auth.js'
-import { ApiError, newProfile, type Post, type Repository, type TransactionIntent } from './domain.js'
+import {
+  ApiError,
+  newProfile,
+  type Post,
+  type PostSummary,
+  type Repository,
+  type TransactionIntent,
+} from './domain.js'
 import { type MediaService, verifyStreamWebhook } from './media.js'
 import type { SeekerVerifier } from './seeker.js'
 import { reconcileIntent } from './transactions.js'
@@ -90,7 +97,7 @@ export function createApp(options: AppOptions) {
     if (!post.market) throw new ApiError(409, 'NO_MARKET', 'This post has no active market.')
     return { postId: post.id, ...post.market }
   }
-  const presentPost = async (post: Post, wallet?: string) => ({
+  const presentPost = async (post: Post, wallet?: string, summary?: PostSummary) => ({
     ...post,
     videoUrl: post.videoUrl?.startsWith('/v1/samples/media/')
       ? new URL(post.videoUrl, options.origin).toString()
@@ -98,9 +105,9 @@ export function createApp(options: AppOptions) {
     thumbnailUrl: post.thumbnailUrl?.startsWith('/v1/samples/media/')
       ? new URL(post.thumbnailUrl, options.origin).toString()
       : post.thumbnailUrl,
-    creator: await repository.getProfile(post.creatorWallet),
-    likes: await repository.likes(post.id, wallet),
-    commentCount: (await repository.listComments(post.id)).length,
+    creator: summary ? summary.creator : await repository.getProfile(post.creatorWallet),
+    likes: summary ? summary.likes : await repository.likes(post.id, wallet),
+    commentCount: summary ? summary.commentCount : (await repository.listComments(post.id)).length,
   })
   const saveIntent = async (
     envelope: TransactionEnvelope,
@@ -367,8 +374,20 @@ export function createApp(options: AppOptions) {
           posts = posts.filter((post) =>
             `${post.caption} ${post.tags.join(' ')}`.toLowerCase().includes(query),
           )
+        const summaries = await repository.getPostSummaries(
+          posts.map((post) => post.id),
+          session?.wallet,
+        )
         send(200, {
-          posts: await Promise.all(posts.map((post) => presentPost(post, session?.wallet))),
+          posts: await Promise.all(
+            posts.map((post) =>
+              presentPost(
+                post,
+                session?.wallet,
+                summaries[post.id] ?? { creator: null, likes: { count: 0, liked: false }, commentCount: 0 },
+              ),
+            ),
+          ),
           creators: route === '/v1/discover' ? await repository.listProfiles() : undefined,
           following: session ? await repository.following(session.wallet) : [],
           mode: options.mode,

@@ -38,6 +38,11 @@ export interface Comment {
   body: string
   createdAt: string
 }
+export interface PostSummary {
+  creator: Profile | null
+  likes: { count: number; liked: boolean }
+  commentCount: number
+}
 export interface Challenge {
   id: string
   address: string
@@ -121,6 +126,7 @@ export interface Repository {
   listProfiles(): Promise<Profile[]>
   saveProfile(profile: Profile): Promise<void>
   listPosts(): Promise<Post[]>
+  getPostSummaries(postIds: string[], wallet?: string): Promise<Record<string, PostSummary>>
   listOwnPosts(wallet: string): Promise<Post[]>
   getPost(id: string): Promise<Post | null>
   insertPost(post: Post): Promise<void>

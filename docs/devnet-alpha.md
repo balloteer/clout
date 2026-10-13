@@ -12,7 +12,9 @@ The app's sidebar, mobile menu and Profile expose **Mint mock SKR**. This faucet
 
 ## Connect persistent services
 
-Save the supplied project's transaction-pooler `DATABASE_URL` in ignored `apps/api/.env.local`. Do not paste its password into chat. Setup commands accept only Supabase project `qsboauxywnuhitlpmojw`, enforce TLS and redact raw connection failures.
+The owner’s project `qsboauxywnuhitlpmojw` is connected. All three migrations are applied and verified, and the 50-post/30-market catalog is seeded. The local API runs in connected mode with trading and the daily faucet enabled. The preview at `http://localhost:8081` calls that API and adds 18 curated posts on the client. This does not deploy the API or app publicly.
+
+Save the supplied project's session-pooler `DATABASE_URL` (port 5432) in ignored `apps/api/.env.local`. Do not paste its password into chat. Supabase’s official public CA is bundled and scoped to database TLS; hostname verification stays enabled. Setup commands accept only Supabase project `qsboauxywnuhitlpmojw`, enforce TLS and redact raw connection failures.
 
 ```sh
 node --env-file-if-exists=apps/api/.env.local scripts/db-setup.mjs

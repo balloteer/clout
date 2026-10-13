@@ -9,6 +9,7 @@ import { createMarketService, DEVNET_GENESIS_HASH } from '../packages/markets/sr
 import { demoPosts, demoProfiles } from '../apps/api/src/fixtures.ts'
 import { sampleMarkets, sampleQuoteMint, sampleMarketConfig } from '../packages/shared/src/sample-markets.ts'
 import { validateTarget, SetupError } from './db-setup.mjs'
+import { databaseTls } from './db-tls.mjs'
 
 export function buildSampleSeed(mediaOrigin) {
   const origin = new URL(mediaOrigin)
@@ -74,16 +75,22 @@ export async function seedInTransaction(db, seed, apply = false) {
   }
   const pending = seed.posts.filter((post) => !byId.has(post.id))
   if (apply) {
-    for (const profile of seed.profiles)
-      await db.query(
-        'insert into public.profiles(wallet,data) values($1,$2::jsonb) on conflict(wallet) do nothing',
-        [profile.wallet, JSON.stringify(profile)],
+    for (const profile of seed.profiles) {
+      const inserted = await db.query(
+        'insert into public.profiles(wallet,data) values($1,$2::jsonb) on conflict(wallet) do nothing returning data',
+        [profile.wallet, profile],
       )
-    for (const post of pending)
-      await db.query(
-        'insert into public.posts(id,creator_wallet,stream_uid,status,data,created_at) values($1,$2,null,$3,$4::jsonb,$5::timestamptz)',
-        [post.id, post.creatorWallet, post.status, JSON.stringify(post), post.createdAt],
+      if (inserted.rows.some((row) => row.data?.wallet !== profile.wallet))
+        throw new SetupError('Seed profile JSON serialization failed; transaction must be rolled back.')
+    }
+    for (const post of pending) {
+      const inserted = await db.query(
+        'insert into public.posts(id,creator_wallet,stream_uid,status,data,created_at) values($1,$2,null,$3,$4::jsonb,$5::timestamptz) returning data',
+        [post.id, post.creatorWallet, post.status, post, post.createdAt],
       )
+      if (inserted.rows.length !== 1 || fingerprint(inserted.rows[0].data) !== fingerprint(post))
+        throw new SetupError('Seed post JSON serialization failed; transaction must be rolled back.')
+    }
   }
   return {
     mode: apply ? 'applied' : 'dry-run',
@@ -131,8 +138,9 @@ async function main() {
       throw new SetupError(`Market account mismatch for ${entry.postId}.`)
   }
   const sql = postgres(target.url.toString(), {
-    ssl: 'verify-full',
+    ssl: databaseTls(target.url),
     max: 1,
+    max_pipeline: 1,
     prepare: false,
     connect_timeout: 15,
   })
