@@ -1,0 +1,52 @@
+{
+  "name": "@clout/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "expo start --dev-client",
+    "web": "expo start --web --port 8081",
+    "android": "expo run:android",
+    "build": "expo export --platform web",
+    "build:android": "expo export --platform android",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/lib/*.test.ts"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.5",
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@solana-mobile/mobile-wallet-adapter-protocol-kit": "^3.0.1",
+    "@solana-mobile/seeker-connect-web": "^0.1.2",
+    "@solana/kit": "^8.4.0",
+    "@tanstack/react-query": "^5.100.14",
+    "@wallet-ui/react-native-kit": "^4.4.1",
+    "expo": "~57.0.6",
+    "expo-constants": "~57.0.5",
+    "expo-dev-client": "~57.0.6",
+    "expo-font": "~57.0.0",
+    "expo-haptics": "~57.0.0",
+    "expo-image-picker": "~57.0.0",
+    "expo-linear-gradient": "~57.0.0",
+    "expo-linking": "~57.0.3",
+    "expo-router": "~57.0.6",
+    "expo-secure-store": "~57.0.0",
+    "expo-splash-screen": "~57.0.4",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.1",
+    "expo-video": "~57.0.5",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "^0.86.3",
+    "react-native-nitro-modules": "^0.36.5",
+    "react-native-quick-base64": "^3.0.1",
+    "react-native-quick-crypto": "^1.1.6",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.14"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Clout",
+    "slug": "clout",
+    "version": "0.1.0",
+    "scheme": "clout",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/brand/icon.png",
+    "android": {
+      "package": "app.clout.mobile",
+      "adaptiveIcon": { "foregroundImage": "./assets/brand/icon.png", "backgroundColor": "#FF3D8B" }
+    },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/brand/icon.png" },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a video to share on Clout.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

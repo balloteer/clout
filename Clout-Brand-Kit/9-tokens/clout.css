@@ -1,0 +1,39 @@
+:root {
+  --clout-pink: #FF3D8B;
+  --clout-lime: #C6FF3D;
+  --clout-ink: #15121C;
+  --clout-cream: #FFF8EE;
+  --clout-white: #FFFFFF;
+  --clout-yellow: #FFD23F;
+  --clout-purple: #2B0B5E;
+  --clout-sky: #3DB8FF;
+  --clout-orange: #FF7A2F;
+  --clout-font-display: 'Titan One', 'Arial Rounded MT Bold', 'Helvetica Rounded', sans-serif;
+  --clout-font-body: 'DM Sans', system-ui, sans-serif;
+  --clout-radius-sm: 8px;
+  --clout-radius-md: 16px;
+  --clout-radius-lg: 24px;
+  --clout-radius-pill: 999px;
+  --clout-shadow-sticker: 0 6px 0 var(--clout-ink);
+}
+
+@font-face {
+  font-family: 'Titan One';
+  src: url('../fonts/TitanOne-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+/* Sticker button */
+.clout-btn {
+  font-family: var(--clout-font-display);
+  background: var(--clout-pink);
+  color: var(--clout-white);
+  border: 3px solid var(--clout-ink);
+  border-radius: var(--clout-radius-pill);
+  box-shadow: var(--clout-shadow-sticker);
+  padding: 14px 28px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: transform .08s, box-shadow .08s;
+}
+.clout-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--clout-ink); }

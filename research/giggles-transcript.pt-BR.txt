@@ -1,0 +1,45 @@
+# Transcrição de trabalho — walkthrough Giggles
+
+Fonte: `RPReplay_Final1791843947.MP4`, duração 4min14,87s. Transcrição automática local em português, comparada entre dois modelos e com as telas correspondentes. A narração está misturada ao áudio dos vídeos reproduzidos no aplicativo. Trechos incertos estão assinalados; não são citações verificadas palavra por palavra.
+
+**00:00–00:44 — [não recuperado com segurança]** Predomina o áudio dos vídeos do feed, inclusive fala em inglês. Não foi possível isolar uma introdução do narrador com confiança.
+
+**00:44–00:52** “[...] vai pro lado, desliza para a esquerda, clica em investir.”
+
+**00:54–00:58** “Vende.”
+
+**00:59–01:06** “E daí aqui dá pra conferir os gráficos de como era, de como tá o vídeo.”
+
+**01:08–01:13** “Aqui dá pra ver outros vídeos semelhantes.”
+
+**01:14–01:18 — [incerto]** Fala curta sobre continuar; palavra final não recuperada com segurança.
+
+**01:20–01:35** “Aqui você tem as pesquisas sobre tudo, principalmente sobre os NFTs que a gente vai fazer.”
+
+**01:38–01:42** “Aqui tem o chat global e o chat geral.”
+
+**01:44–01:48** “Dá pra você criar um chat com os amigos também.”
+
+**01:50–02:04** “E aqui é a aba dos NFTs, que a pessoa recebe um baú desse pra abrir.”
+
+**02:04–02:39 — [parcialmente inaudível]** O narrador acompanha a abertura do baú. Os modelos discordam nesse trecho; a tela mostra a revelação da carta Fanum Tax (COMMON) e depois a coleção.
+
+**02:40–02:50 — [parcial]** “Ó, mas aqui eu tenho todos os que eu tenho. [...] clicar e ver de novo como que é.”
+
+**02:50–03:10** “Mas aqui, ó, no botão de pesquisar você consegue vir e você vende ou troca aquilo que você tem de carta.”
+
+**03:10–03:20** “Com base nisso você consegue ver, você aposta no que está aqui.”
+
+**03:20–03:28** “Então você consegue comprar os memes de outras pessoas.”
+
+**03:28–03:34** “Daí aqui você consegue vender, mas tá dando errado, não sei por quê.”
+
+**03:35–03:49** “E aqui você consegue ver a sua aba: todos os posts que eu já fiz, os que eu investi, que eu tô investindo agora, tudo que eu já republiquei.”
+
+**03:50–03:56** “E aí aqui você pega mais a Aura.”
+
+**04:04–04:07 — [aproximado]** “E aí é isso.”
+
+## Observação de interpretação
+
+O narrador usa “NFTs” para as cartas, mas nenhuma carteira, assinatura ou transação em blockchain aparece na gravação. Aura é a unidade visível. A proposta de Clout deve distinguir a mecânica observada de qualquer implementação on-chain que se queira acrescentar.

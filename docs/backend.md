@@ -1,0 +1,145 @@
+# Clout API
+
+Run `npm run api` from the repository root. The API listens on `http://127.0.0.1:8787`. Its default mode serves explicitly labeled editorial and devnet sample profiles and licensed Blender sample videos without cloud credentials. Social changes in this mode last until the process exits. The checked-in sample registry attaches only finalized devnet markets; samples never invent holdings, trades or rewards. Both demo and connected APIs serve the strict 50-clip/poster whitelist with GET/HEAD and byte-range seeking. The slogan is **Seek the best content, win SKR**. This early alpha is devnet-only, including identity reads; no mainnet RPC client is constructed by the server.
+
+For a phone, bind `HOST=0.0.0.0` and point `EXPO_PUBLIC_API_URL` to the host's LAN address. Use an HTTPS origin for a connected deployment and a public HTTPS origin for token metadata. Wallet ownership is verified by signing the exact UTF-8 message from the challenge endpoint; no transaction authorization is included in that message.
+
+## Connected configuration
+
+See `apps/api/.env.example`. The API dev/start scripts load the ignored `apps/api/.env.local` using Node’s `--env-file-if-exists` flag. Copy the example into that file for local setup; existing process-manager environment variables take precedence. Use Node 22.9 or newer for this flag. Do not copy server credentials into Expo variables.
+
+| Variable                                                               | Purpose                                                                                                           |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `CLOUT_MODE=connected`                                                 | Requires persistent Postgres; production refuses demo mode                                                        |
+| `DATABASE_URL`                                                         | Server-only Supabase Postgres transaction-pooler URL; prepared statements disabled, TLS verified for remote hosts |
+| `CLOUT_ORIGIN`                                                         | Canonical HTTPS origin pinned into sign-in messages and post metadata                                             |
+| `CLOUT_ALLOWED_ORIGINS`                                                | Comma-separated exact browser origins; native requests have no Origin header                                      |
+| `SOLANA_DEVNET_RPC_URL`                                                | Devnet market and balance RPC; genesis is checked                                                                 |
+| `SKR_DEVNET_MINT`                                                      | Explicit devnet test-SKR mint, distinct from mainnet SKR                                                          |
+| `SKR_DECIMALS`                                                         | Test mint decimals, default 6                                                                                     |
+| `METEORA_DBC_CONFIG`                                                   | Provisioned shared DBC config; required to launch markets                                                         |
+| `CLOUDFLARE_ACCOUNT_ID`                                                | Stream account                                                                                                    |
+| `CLOUDFLARE_STREAM_API_TOKEN`                                          | Stream-scoped server token                                                                                        |
+| `CLOUDFLARE_STREAM_WEBHOOK_SECRET`                                     | HMAC secret for processing callbacks                                                                              |
+| `REWARDS_ENABLED=false`                                                | Required in this devnet-only alpha; enabling mainnet-SGT rewards stops startup                                    |
+| `LINKED_ACCOUNTS_ENABLED`                                              | Enables owned X video imports only with persistent storage, encrypted OAuth tokens and Cloudflare configured      |
+| `X_CLIENT_ID`, `X_CLIENT_SECRET`                                       | Confidential X OAuth2 application credentials; server only                                                        |
+| `LINKED_ACCOUNTS_ENCRYPTION_KEY`                                       | Base64 32-byte AES-GCM key; keep stable and protect in a secret manager                                           |
+| `FAUCET_ENABLED`                                                       | Enables 1,000 mock SKR per authenticated wallet per UTC day                                                       |
+| `FAUCET_CAMPAIGN_ID`, `FAUCET_AMOUNT_UNITS`, `FAUCET_MAX_DAILY_CLAIMS` | Stable `faucet_` campaign ID, exactly 1,000 SKR in atomic units, daily global cap 1–10,000                        |
+| `FAUCET_MAX_SUPPLY_UNITS`                                              | Absolute mock-mint supply ceiling; default one billion SKR, reserved in a permanent database ledger               |
+| `FAUCET_MINT_AUTHORITY_SECRET_BASE64`                                  | Server-only 64-byte devnet mint authority, funded for SOL fees and recipient ATA rent                             |
+
+Apply `supabase/migrations/20261013000133_clout_initial.sql` to the chosen local or devnet-backed Supabase project before connected startup. No database has been provisioned or migrated remotely. Keep the `private` schema out of exposed Data API schemas. The API database role needs access to these tables and bypasses client RLS; its credentials belong exclusively on the server. Public clients receive read access to profiles, ready posts and their comments. Supabase `anon` and `authenticated` have no write grants. The API uses its own opaque wallet sessions, not Supabase Auth JWTs. This avoids treating an unrelated Supabase identity as wallet ownership.
+
+## Connecting the selected Supabase project
+
+The setup helper is restricted to project `qsboauxywnuhitlpmojw`. Store that project's Postgres connection string as `DATABASE_URL` in ignored `apps/api/.env.local`; the API URL/publishable key are not substitutes. Keep `CLOUT_MODE=demo` until migration verification passes. Do not paste database passwords into shell commands or chat.
+
+From the repository root, run the read-only connection and catalog check:
+
+```sh
+node --env-file=apps/api/.env.local scripts/db-setup.mjs
+```
+
+This validates the exact direct hostname or shared-pooler username, enforces verified TLS, and reads schema metadata in a read-only transaction. It prints the project reference, existing application table names, RLS/grant checks and initial migration SHA-256. It does not read user rows or print credentials. `initialMigrationState: "ready"` means the initial application schemas are empty; `"already-applied"` means the recorded migration and protected table set match; `"review-required"` reports existing objects or drift.
+
+Apply the reviewed initial migration with the separate command:
+
+```sh
+node --env-file=apps/api/.env.local scripts/db-setup.mjs --apply
+```
+
+The apply command uses port 5432 on the **same validated Supabase host** for a direct/session connection, retaining the project identity and credentials. It refuses an existing application schema or private schema instead of overwriting it. It stages only `20261013000133_clout_initial.sql` in a temporary workspace, uses pinned Supabase CLI 2.120.0, runs a migration dry-run, checks the schema again, and pushes with vault/seed/role updates excluded. Passwords pass only through the child process environment; CLI arguments contain no password. A final read-only check confirms migration history, all 13 tables, RLS and client grant restrictions. Repeating the command after success performs no migration writes. No reset or migration-history repair is automated.
+
+After verification, set `CLOUT_MODE=connected` in the ignored server file and restart `npm run api`. Leave trading, uploads and rewards unconfigured until their corresponding service settings are ready. A connected empty database correctly returns an empty community feed; it does not seed fictional creators into the hosted project.
+
+Local verification is reproducible without database credentials:
+
+```sh
+node scripts/db-smoke.mjs
+node --test scripts/db-setup.test.mjs
+```
+
+The smoke uses only GET requests to the local API, checks the activity/rewards UI contracts and confirms claim endpoints require authentication. Authenticated owner claim hydration is separately covered by the API HTTP tests. The setup tests validate project binding, secret redaction, existing-schema refusal and the actual migration's RLS/grants using PGlite.
+
+CLI flags were discovered with `supabase --help`, `db --help`, `db push --help`, `migration list --help` and `init --help`. Current references: [Supabase CLI](https://supabase.com/docs/reference/cli/supabase-db-push) and [database connection modes](https://supabase.com/docs/guides/database/connecting-to-postgres).
+
+## API contract
+
+Errors are `{ "error": { "code": "...", "message": "..." } }`. Protected routes require `Authorization: Bearer <token>`. Atomic amounts are decimal **strings**, never floating point numbers. All trade/tip requests use Test SKR on devnet; SOL is only the network-fee asset.
+
+| Route                                        | Behavior                                                                                                                |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`, `GET /v1/config`              | Mode, network, mint, decimals and availability flags                                                                    |
+| `POST /v1/auth/challenge`                    | `{address}` → `{challengeId,message,messageBase64,expiresAt}`                                                           |
+| `POST /v1/auth/verify`                       | `{challengeId,signature,signedMessage}` (base64) → `{token,expiresAt,profile}`                                          |
+| `POST /v1/auth/logout`                       | Revokes the current hashed session                                                                                      |
+| `GET /v1/me`, `PATCH /v1/me`                 | Own profile and followed wallet addresses; only displayName and bio can be changed                                      |
+| `GET /v1/feed?tab=for-you\|following`        | `{posts,mode}`; following requires sign-in                                                                              |
+| `GET /v1/discover?q=...`                     | Matching ready posts and creators                                                                                       |
+| `GET /v1/posts/:id/activity`                 | Latest 100 verified Clout executions, integer amounts, decimals and finality; no external trades                        |
+| `GET /v1/posts/:id`                          | Ready post plus creator, likes and comment count                                                                        |
+| `GET /v1/profiles/:wallet`                   | `{profile,posts}`; owner also sees processing/failed posts                                                              |
+| `GET`, `POST /v1/posts/:id/comments`         | Read comments or add `{body}`; author comes from session                                                                |
+| `POST`, `DELETE /v1/posts/:id/likes`         | Idempotently like or unlike                                                                                             |
+| `POST`, `DELETE /v1/profiles/:wallet/follow` | Idempotently follow or unfollow                                                                                         |
+| `POST /v1/uploads`                           | `{caption}` → `{post,uploadUrl}`; phone POSTs the file to Cloudflare                                                    |
+| `POST /v1/webhooks/stream`                   | Signed raw Cloudflare body; only ready-to-stream callbacks publish media                                                |
+| `POST /v1/eligibility`                       | Unavailable in the devnet-only alpha; it does not report a false ineligible result                                      |
+| `POST /v1/posts/:id/launch`                  | `{name,symbol}` → unsigned envelope + `intentId`; creator only                                                          |
+| `GET /v1/posts/:id/metadata`                 | Canonical token JSON, caption, thumbnail, video and creator                                                             |
+| `POST /v1/posts/:id/quote`                   | `{side,amountIn,slippageBps}` → `TradeQuote`                                                                            |
+| `POST /v1/trades/build`                      | `{quoteId}` → unsigned `BuiltTrade` + `intentId`; retries reuse stored bytes                                            |
+| `POST /v1/posts/:id/fees/build`              | Creator only → `{transactions:[envelope + intentId]}`                                                                   |
+| `POST /v1/tips/build`                        | `{recipient,amountIn,requestId:UUID}` → unsigned Test SKR tip + `intentId`                                              |
+| `POST /v1/transactions/:id/confirm`          | `{signature}` → pending/expired/failed/confirmed, verified token deltas                                                 |
+| `GET /v1/transactions/:id`                   | Owner's persisted intent, envelope and current state                                                                    |
+| `GET /v1/portfolio`                          | Chain balances, holdings, fresh sell estimates, verified activity                                                       |
+| `GET /v1/rewards/campaign`                   | `{available,campaign,claim,reason?}`; own persisted claim when authenticated; amount, decimals, cap and remaining slots |
+| `POST /v1/claims`                            | `{campaignId?}` → durable owner claim; fresh SGT verification on every request                                          |
+| `GET /v1/claims/:id`                         | Owner's reserved claim status, with signed bytes excluded                                                               |
+
+Quotes, launches, fee claims and tips are simulated and returned unsigned for wallet approval. User trades, launches, fees and tips are never signed or sent by the service. The separately enabled rewards worker uses only its configured devnet treasury signer. A creator's post becomes a market only after the stored launch message matches a confirmed chain transaction. A quote can yield only one persisted trade intent. A post can have only one live launch intent. Tips require a new request ID for each intentional payment and return identical bytes for retries.
+
+Every 15 seconds, the connected service resumes persisted transaction signatures, promotes finalized activity, and expires unsubmitted envelopes only after their last valid block height. It never rebuilds or resends transactions during reconciliation. The app must persist the signature before broadcast and resume confirmation after a restart. Failed or expired transactions remove provisional events. Finalized history cannot be downgraded. Early-backer badges require a finalized purchase through a verified Clout intent; transferred tokens alone never earn the badge. Current holdings always come from wallet token accounts rather than summing trade history.
+
+## Verification and remaining integrations
+
+`npm run test --workspace @clout/api` exercises HTTP requests, actual Ed25519 wallet signing, nonce replay, wallet/key substitution, unauthorized mutation, webhook byte tampering/replay, SGT extension forgery and stale balances, market retry idempotency, transaction finality, payout interruption/lease recovery and bounded retries, and real Postgres SQL through PGlite. The migration's grants and RLS allow/deny rules are exercised with `anon` and `authenticated` roles. A separate `supabase/tests/rls.test.sql` is ready for `supabase test db` when a full local Supabase instance is available. PGlite is not a live Supabase deployment, and connected RPC/media credentials are not part of automated tests.
+
+The indexed-event repository and `TransactionIndexer` support instruction-path deduplication, atomic checkpoint writes and backfill. The running worker covers transactions created by this API. A protocol-wide event decoder/subscription source is still needed to ingest trades made outside Clout; wallet balances remain correct without it. Feed reads currently cap at 100 posts and social comments at 100; pagination and moderation are future service work.
+
+The SGT reward implementation and unit tests are retained for future work, but are not wired into this alpha runtime. `REWARDS_ENABLED=true` now stops startup. Mainnet SGT and `.skr` lookups are never made by the alpha server. Eligibility and reward routes clearly remain unavailable. Wallet addresses are the authenticated identity.
+
+The shared payout engine moves claims through `reserved → prepared → submitted → finalized`; only `finalized` means paid. It acquires a90-second lease, persists exact signed bytes, signature and block-height expiry before first broadcast, and resumes the same signature after restart. A new attempt requires a finalized onchain failure, bounded to3 attempts. Missing historical status after expiry is `needsReview`, never permission to mint again. Signed bytes and lease fields never reach clients. Campaign registration/reservation serialize and reject replacement while previous claims remain unresolved.
+
+The retained identity verifier modules are tested in isolation but unused by `server.ts` in this devnet-only alpha.
+
+## Linked accounts and inbound video imports
+
+Apply `20261013020605_linked_accounts.sql` after the initial migration. It adds only private tables for OAuth attempts, encrypted linked accounts and import jobs. All use RLS and revoke access from anonymous/authenticated Data API clients. A database trigger takes a wallet advisory lock and enforces a maximum of 3 combined X/Fomo accounts; provider identity is globally unique while linked. No migration has been applied remotely by this feature work. After the initial setup, use `node --env-file=apps/api/.env.local scripts/db-linked.mjs` for a read-only check, then add `--apply` to apply only this reviewed migration. The helper pins project `qsboauxywnuhitlpmojw`, verifies initial migration history and existing tables, rejects partial/drifted objects, and uses the pinned Supabase CLI dry-run before applying. `node --test scripts/db-linked.test.mjs` exercises the checks against actual local Postgres semantics.
+
+`GET /v1/linked-accounts` requires a wallet session and returns `{limit:3,providers:{x,fomo},accounts}`. Each account exposes only id, provider, handle, displayName, status, createdAt and optional lastImportedAt/lastError. `POST /v1/linked-accounts/x/connect {accountId?,clientChallenge}` returns `{authorizationUrl,expiresAt,state}`; optional accountId reconnects an existing owned account even at the limit. The initiating app generates a random 64-character hex verifier and sends its lowercase SHA256 hex challenge. It retains the verifier/state with the initiating wallet in SecureStore. The browser start route sets an HttpOnly, SameSite=Lax cookie before redirecting to X. Callback verifies the one-use state, browser cookie and still-live initiating wallet session, exchanges the code, and stores an encrypted pending grant without connecting an account. It returns only to the fixed `clout://linked-accounts?attempt=…&completion=…` route. The random completion secret is delivered solely to that callback browser; only its hash is stored, and there is no polling endpoint. The initiating app must match its locally retained state, then call authenticated `POST /v1/linked-accounts/x/complete {state,completion,verifier}`. The server verifies all three proofs against the same initiating session and wallet, atomically saves the account and a short-lived idempotent receipt, and deletes the pending grant. Completion expires after two minutes; the initial attempt expires after ten. Forwarding a start URL cannot link a victim account because the attacker never receives the callback-only secret and the victim app lacks the initiating state/verifier. Native Clout must be installed for the return URI; a production release should adopt verified HTTPS app links. X PKCE uses S256 independently of the local app verifier. Tokens/verifiers are encrypted using AES-256-GCM and wallet/provider identity as authenticated context. Reconnect must authorize the same X identity. No arbitrary callback/return URL is accepted.
+
+The X confidential application must register exactly `${CLOUT_ORIGIN}/v1/linked-accounts/x/callback`. Requested scopes are only `tweet.read users.read offline.access`; Clout never requests permission to post to X. Access and refresh tokens stay on the server. Fresh `/2/users/me` identifies the owner and excludes protected accounts. Token refresh happens under a durable worker lease, and refreshed ciphertext is saved before further requests. A crash during provider token rotation may require reconnecting; it cannot expose credentials.
+
+`POST /v1/linked-accounts/:id/pause`, `/resume`, `/disconnect` require the owning wallet and return `{ok:true}`. Disconnect deletes stored credentials and stops future polling. Existing Clout posts remain, and an already-submitted video can finish processing. Grant revocation can also be managed in X's own connected-app settings. The worker polls every minute for accounts due on a 5-minute cadence, with 15-minute error backoff. It imports only new, original, public, owned posts after linking, with exactly one MP4 video of 60 seconds or less. Reposts, replies, quotes, referenced media, text-only posts and longer videos are excluded. Fomo is explicitly unavailable until the requested service and supported API are identified; no fabricated OAuth integration is present.
+
+Imports reserve a unique `(wallet,provider,source post ID)` job and a processing post before making a Cloudflare copy request. Only exact HTTPS `video.twimg.com` MP4 URLs returned by the provider are accepted. The durable `submitting` boundary prevents repeating a non-idempotent copy after timeout/crash: ambiguous jobs become `needs_review`. A signed Cloudflare callback can recover a lost response using import metadata, bind the Stream UID, and publish only a ready video whose actual duration is within 60 seconds. Markets always start null. Imported source attribution is retained on the post. Imports never launch a token, trade, claim or sign a wallet transaction.
+
+Production needs configured X API access/usage credits and a scoped Cloudflare Stream token. Review provider terms, deletion/visibility synchronization, moderation, retention and operational alerts before exposing this worker to users; current imports are a one-way publication and do not mirror later edits/deletions. The automated suite uses mocks and PGlite, with no real X account or Cloudflare write performed.
+
+References: [X OAuth2 PKCE/scopes](https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code), [owned user posts](https://docs.x.com/x-api/users/get-posts), [authenticated user lookup](https://docs.x.com/x-api/users/lookup/quickstart/authenticated-lookup), [Cloudflare copy by URL](https://developers.cloudflare.com/stream/uploading-videos/upload-via-link/).
+
+## Mock SKR faucet
+
+Apply `20261013051351_daily_faucet.sql` after the initial and linked-account migrations. Use `node --env-file=apps/api/.env.local scripts/db-faucet.mjs` for a read-only check, then append `--apply`. The helper pins the owner’s Clout project, verifies migration history and private grants, and rejects partial schema state. Do not enable the daily faucet against the older schema.
+
+`GET /v1/faucet` returns wallet-aware availability, a clear reason, `network:devnet`, mock mint, fixed atomic amount, decimals, and the current owner's claim if authenticated. Each wallet receives one 1,000-SKR allocation per UTC day. The response includes `period:utc-day`, `day`, `resetAt`, atomic `dailyLimit`, `claimedAmount`, and `remainingAmount`; `cooldownSeconds` is 86400 and `nextClaimAt` is the next UTC midnight after today's allocation. An unresolved older request blocks a new allocation until reconciled. `POST /v1/faucet/claims {}` authenticates the wallet; the caller cannot choose recipient or amount. `GET /v1/faucet/claims/:id` is owner-only. A prepared/submitted transaction is pending, never a minted receipt; only finalized state confirms minting.
+
+The faucet requires persistent storage, a dedicated configured mock-mint authority, full devnet genesis verification, a standard SPL mint without freeze authority, SOL for fees/rent, and an absolute supply ceiling. The campaign identity, mint, authority, amount, cap and supply ceiling are immutable. Startup verifies authority/network without reserving the same supply twice when an existing mint already landed; availability remains closed until durable receipts reconcile and sufficient remaining capacity exists. Database time determines the UTC day after acquiring the campaign lock. A wallet/day unique index prevents duplicate allocations; a daily global limit bounds reservations. A permanent budget ledger retains the original supply baseline and every reserved grant across midnight and restarts, preventing concurrent reservations from exceeding the lifetime supply ceiling. SOL funding is checked for the current grant, without requiring all daily recipients to be prefunded. The existing durable claims/lease schema is reused with a faucet wallet key; no SGT ownership is implied or checked. Signed mint bytes commit before sending, retries track the same signature, missing expired history requires review, and only finalized failures may be retried up to 3 times. Disabling the worker stops recovery until the same campaign is restored. Do not concurrently mint through another process using the same authority; standard SPL has no onchain supply-cap extension.
+
+Cloudflare webhook HMAC uses raw bytes, constant-time comparison and a five-minute timestamp window. Repeated callbacks cannot regress a processed upload. Configure the public callback URL as `/v1/webhooks/stream`. Server rate limits are per process and use socket IPs, never untrusted forwarded headers; use an authenticated reverse proxy and shared rate limits before horizontally scaling. Schedule retention for expired challenges, sessions and quotes in the operational database.
+
+References checked during implementation: [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [Cloudflare Stream webhook verification](https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/), [direct uploads](https://developers.cloudflare.com/stream/uploading-videos/direct-creator-uploads/), [Seeker verification](https://docs.solanamobile.com/recipes/general/detecting-seeker-users), and [AllDomains SDK](https://docs.alldomains.id/protocol/developer-guide/ad-sdks/svm-sdks/solana-mainnet-sdk).

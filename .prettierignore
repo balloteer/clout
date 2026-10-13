@@ -1,0 +1,10 @@
+node_modules
+**/dist
+**/.expo
+**/expo-env.d.ts
+**/android
+**/assets
+Clout-Brand-Kit
+.agents
+research
+package-lock.json

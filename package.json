@@ -1,0 +1,33 @@
+{
+  "name": "clout",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @clout/mobile",
+    "web": "npm run web --workspace @clout/mobile",
+    "api": "npm run dev --workspace @clout/api",
+    "android": "npm run android --workspace @clout/mobile",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --import tsx --test scripts/*.test.mjs",
+    "lint": "eslint apps/mobile/src && npm run lint --workspace @clout/api --if-present && npm run lint --workspace @clout/markets --if-present",
+    "format": "prettier --write apps packages supabase docs scripts README.md package.json eslint.config.js",
+    "format:check": "prettier --check apps packages supabase docs scripts README.md package.json eslint.config.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@playwright/test": "^1.56.0",
+    "eslint": "^9.25.0",
+    "eslint-config-expo": "~57.0.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.20.0",
+    "typescript": "~6.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

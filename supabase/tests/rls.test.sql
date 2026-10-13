@@ -1,0 +1,17 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(12);
+select ok((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), 'profiles RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.posts'::regclass), 'posts RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.comments'::regclass), 'comments RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.likes'::regclass), 'likes RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.follows'::regclass), 'follows RLS enabled');
+select ok(not has_table_privilege('anon', 'public.posts', 'INSERT'), 'anon cannot insert posts');
+select ok(not has_table_privilege('authenticated', 'public.posts', 'UPDATE'), 'Supabase auth cannot bypass API ownership');
+select ok(not has_table_privilege('authenticated', 'public.profiles', 'UPDATE'), 'client cannot forge seeker status');
+select ok(not has_schema_privilege('anon', 'private', 'USAGE'), 'anon cannot access sessions or claims');
+select ok(not has_schema_privilege('authenticated', 'private', 'USAGE'), 'authenticated cannot access operational schema');
+select ok(not has_table_privilege('anon', 'public.likes', 'SELECT'), 'wallet likes are not public');
+select ok(has_table_privilege('anon', 'public.posts', 'SELECT'), 'ready posts have a public read grant');
+select * from finish();
+rollback;

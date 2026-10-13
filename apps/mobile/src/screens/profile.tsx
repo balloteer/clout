@@ -1,0 +1,433 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { useWallet } from '../lib/wallet'
+import { useApp } from '../lib/store'
+import { api, API_URL, postJson } from '../lib/api'
+import { displayAtomic } from '../lib/amounts'
+import type { ApiPost, ApiProfile, Portfolio } from '../lib/contracts'
+import { confirmPending, getPending, type PendingTransaction } from '../lib/transactions'
+import { mediaCredits } from '../lib/data'
+import { colors as c, SLOGAN } from '../lib/theme'
+import { Avatar, Badge, Button, Icon, Section, Txt } from '../components/ui'
+import { CreatorPost, TipForm } from '../components/creator-actions'
+import { RewardPanel } from '../components/reward-panel'
+import { LinkedAccounts } from '../components/linked-accounts'
+
+type ProfileResponse = { profile: ApiProfile; posts: ApiPost[] }
+type AppConfig = {
+  quoteDecimals: number
+  features: { trading: boolean; rewards: boolean; seekerVerification: boolean }
+}
+
+type ProfileProps = { onConnect: () => void; onFaucet?: () => void }
+
+export function Profile({ onConnect, onFaucet }: ProfileProps) {
+  const wallet = useWallet()
+  return <WalletProfile key={wallet.address ?? 'guest'} onConnect={onConnect} onFaucet={onFaucet} />
+}
+
+function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
+  const wallet = useWallet()
+  const { saved, following, notify, refresh: refreshFeed } = useApp()
+  const [profile, setProfile] = useState<ApiProfile | null>(null)
+  const [posts, setPosts] = useState<ApiPost[]>([])
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [config, setConfig] = useState<AppConfig | null>(null)
+  const [pending, setPending] = useState<PendingTransaction | null>(null)
+  const [recoveryError, setRecoveryError] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(!!wallet.address)
+  const [busy, setBusy] = useState(false)
+  const [eligibility, setEligibility] = useState('')
+  const generation = useRef(0)
+  const load = useCallback(async () => {
+    const version = ++generation.current
+    if (!wallet.address) return
+    try {
+      const recovery = await getPending(wallet.address)
+      if (version === generation.current) setPending(recovery)
+    } catch (err) {
+      if (version === generation.current)
+        setRecoveryError(err instanceof Error ? err.message : 'Could not read transaction recovery.')
+    }
+    if (!API_URL) {
+      setLoading(false)
+      return
+    }
+    const [identityResult, portfolioResult, configResult] = await Promise.allSettled([
+      api<ProfileResponse>(`/v1/profiles/${wallet.address}`),
+      api<Portfolio>('/v1/portfolio'),
+      api<AppConfig>('/v1/config'),
+    ])
+    if (version !== generation.current) return
+    if (identityResult.status === 'fulfilled') {
+      setProfile(identityResult.value.profile)
+      setPosts(identityResult.value.posts)
+    } else
+      setError(
+        identityResult.reason instanceof Error
+          ? identityResult.reason.message
+          : 'Could not load your profile.',
+      )
+    if (portfolioResult.status === 'fulfilled') setPortfolio(portfolioResult.value)
+    else {
+      setPortfolio(null)
+      setError(
+        portfolioResult.reason instanceof Error
+          ? portfolioResult.reason.message
+          : 'Wallet balances are unavailable.',
+      )
+    }
+    if (configResult.status === 'fulfilled') setConfig(configResult.value)
+    setLoading(false)
+  }, [wallet.address])
+  useEffect(() => {
+    void Promise.resolve().then(load)
+  }, [load])
+  async function refresh() {
+    if (!wallet.address) return
+    setLoading(true)
+    setError('')
+    setRecoveryError('')
+    await load()
+  }
+  async function changed() {
+    await Promise.all([refresh(), refreshFeed()])
+  }
+  async function checkPending() {
+    if (!wallet.address) return
+    setBusy(true)
+    try {
+      const result = await confirmPending(wallet.address)
+      notify(
+        result.status === 'confirmed'
+          ? 'Your transaction is confirmed.'
+          : result.status === 'pending'
+            ? 'Still waiting for confirmation. You can safely check again.'
+            : `Transaction ${result.status}.`,
+      )
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Confirmation is temporarily unavailable.')
+    } finally {
+      setBusy(false)
+      await changed()
+    }
+  }
+  async function checkEligibility() {
+    if (!wallet.address) {
+      onConnect()
+      return
+    }
+    setBusy(true)
+    setEligibility('')
+    try {
+      const result = await postJson<{ hasSGT: boolean; mintAddress: string | null }>('/v1/eligibility', {})
+      setEligibility(
+        result.hasSGT
+          ? 'Your Seeker ownership is verified. Check available SKR campaigns below.'
+          : 'No Seeker Genesis Token was found in this wallet. Use the wallet that holds your SGT.',
+      )
+      await refresh()
+    } catch (err) {
+      setEligibility(err instanceof Error ? err.message : 'Seeker verification is temporarily unavailable.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const verified = profile?.seekerVerified ?? wallet.seeker
+  const blocked = !!pending || !!recoveryError || busy
+  const balance = portfolio?.balance
+  return (
+    <ScrollView
+      contentContainerStyle={s.content}
+      refreshControl={
+        <RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={c.lime} />
+      }
+    >
+      <View style={s.cover}>
+        <View style={s.orbit} />
+        <Txt display style={s.coverText}>
+          Taste is{'\n'}a superpower.
+        </Txt>
+        <Icon name="sparkles" color={c.ink} size={42} />
+      </View>
+      <View style={s.identity}>
+        <Avatar letter={profile?.displayName ?? (wallet.address ? 'S' : '?')} size={78} color={c.cream} />
+        <Badge color={verified ? c.lime : c.surface}>
+          <Txt style={{ fontSize: 11, color: verified ? c.ink : c.muted }}>
+            {verified ? 'Verified Seeker' : 'Your next chapter'}
+          </Txt>
+        </Badge>
+      </View>
+      <Txt display style={s.name}>
+        {profile?.handle ??
+          wallet.name ??
+          (wallet.address
+            ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
+            : 'Your clout starts here.')}
+      </Txt>
+      {wallet.address && (
+        <Txt selectable style={s.small}>
+          {wallet.address.slice(0, 6)}…{wallet.address.slice(-6)}
+        </Txt>
+      )}
+      <Txt style={s.bio}>{wallet.address ? 'Your discoveries, backed by your wallet.' : SLOGAN}</Txt>
+      {!wallet.address && (
+        <Button onPress={onConnect} icon="wallet-outline">
+          Connect your wallet
+        </Button>
+      )}
+      {!!error && (
+        <Txt accessibilityRole="alert" style={s.error}>
+          {error}
+        </Txt>
+      )}
+      {!!recoveryError && (
+        <View style={s.pending}>
+          <Txt style={s.error}>{recoveryError}</Txt>
+          <Button secondary onPress={() => void refresh()}>
+            Retry transaction recovery
+          </Button>
+        </View>
+      )}
+      {pending && (
+        <View style={s.pending}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Icon name="time-outline" color={c.yellow} />
+            <Txt style={{ fontWeight: '700' }}>{pending.description ?? 'Pending wallet transaction'}</Txt>
+          </View>
+          <Txt style={s.small}>
+            A signed transaction needs confirmation. Check it before starting another action.
+          </Txt>
+          <Button disabled={busy} onPress={() => void checkPending()}>
+            {busy ? 'Checking…' : 'Check transaction status'}
+          </Button>
+        </View>
+      )}
+      <View style={s.stats}>
+        {[
+          [saved.length, 'Saved finds'],
+          [following.length, 'Following'],
+          [profile ? posts.length : '—', 'Posts'],
+        ].map(([value, label]) => (
+          <View key={label} style={{ alignItems: 'center', gap: 5 }}>
+            <Txt display style={{ fontSize: 26, lineHeight: 34 }}>
+              {value}
+            </Txt>
+            <Txt style={{ fontSize: 12, color: c.muted }}>{label}</Txt>
+          </View>
+        ))}
+      </View>
+      <LinkedAccounts onConnect={onConnect} />
+      <Section title="Your SKR">
+        <View style={s.balance}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Txt style={s.small}>Wallet balance · Test SKR</Txt>
+            <Txt display style={{ fontSize: 34, lineHeight: 46 }}>
+              {balance ? displayAtomic(balance.amount, balance.decimals) : '—'}
+            </Txt>
+          </View>
+          <Icon name="wallet-outline" color={c.lime} size={31} />
+        </View>
+        <Txt style={s.small}>
+          {portfolio?.gasLamports
+            ? `${displayAtomic(portfolio.gasLamports, 9, 6)} SOL available for network fees and account rent.`
+            : wallet.address
+              ? 'Connect the market service to load token and SOL balances.'
+              : 'Connect your wallet to see your balance.'}
+        </Txt>
+      </Section>
+      {config?.features.seekerVerification ? (
+        <Section title="A little Seeker perk">
+          <View style={s.reward}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Icon name="gift-outline" size={30} color={c.yellow} />
+              <Badge color={c.yellow}>SKR rewards</Badge>
+            </View>
+            <Txt display style={{ fontSize: 22, marginTop: 17 }}>
+              Good finds deserve good things.
+            </Txt>
+            <Txt style={{ color: c.muted, fontSize: 13, marginTop: 10, marginBottom: 18 }}>
+              Seeker holders can claim funded SKR campaigns. Each campaign has a fixed budget.
+            </Txt>
+            <Button secondary disabled={busy} onPress={() => void checkEligibility()}>
+              {busy ? 'Checking…' : 'Check eligibility'}
+            </Button>
+            {!!eligibility && <Txt style={[s.small, { marginTop: 14 }]}>{eligibility}</Txt>}
+            <RewardPanel onConnect={onConnect} />
+          </View>
+        </Section>
+      ) : (
+        <Section title="Devnet alpha">
+          <View style={s.reward}>
+            <Badge color={c.lime}>Test tokens only</Badge>
+            <Txt style={[s.small, { marginTop: 14, marginBottom: 16 }]}>
+              Try backing posts with mock SKR on Solana devnet. Test tokens have no real value. Seeker rewards
+              are unavailable in this alpha.
+            </Txt>
+            {onFaucet && (
+              <Button secondary onPress={onFaucet} icon="water-outline">
+                Mint mock SKR
+              </Button>
+            )}
+          </View>
+        </Section>
+      )}
+      <Section
+        title="Creator corner"
+        aside={<Txt style={s.small}>{wallet.address ? `${posts.length} posts` : ''}</Txt>}
+      >
+        {wallet.address && posts.length ? (
+          posts.map((post) => <CreatorPost key={post.id} post={post} blocked={blocked} onChanged={changed} />)
+        ) : (
+          <View style={s.emptyCreator}>
+            <Icon name="color-wand-outline" color={c.pink} size={30} />
+            <Txt style={{ fontWeight: '700' }}>Your next post starts a story.</Txt>
+            <Txt style={s.small}>
+              {wallet.address
+                ? 'Publish a video in Create, then return here to launch its market and claim creator fees.'
+                : 'Connect your wallet to manage your posts and creator fees.'}
+            </Txt>
+          </View>
+        )}
+      </Section>
+      {wallet.address && (
+        <Section title="Send a little love">
+          <TipForm
+            key={wallet.address}
+            decimals={config?.quoteDecimals ?? 6}
+            blocked={blocked}
+            onChanged={changed}
+          />
+        </Section>
+      )}
+      {portfolio?.events.length ? (
+        <Section title="Wallet activity">
+          <View style={{ gap: 14 }}>
+            {portfolio.events.slice(0, 5).map((event) => (
+              <View key={`${event.signature}:${event.postId}`} style={s.activity}>
+                <Icon
+                  name={event.kind === 'buy' ? 'arrow-down-outline' : 'arrow-up-outline'}
+                  color={event.kind === 'buy' ? c.lime : c.pink}
+                />
+                <View style={{ flex: 1 }}>
+                  <Txt style={{ fontWeight: '700' }}>
+                    {event.kind === 'buy' ? 'Backed a post' : 'Sold a position'}
+                  </Txt>
+                  <Txt style={s.small}>
+                    {event.signature.slice(0, 8)}…{event.signature.slice(-6)}
+                  </Txt>
+                </View>
+                <Txt>{displayAtomic(event.quoteAmount, balance?.decimals ?? 6)} Test SKR</Txt>
+              </View>
+            ))}
+          </View>
+        </Section>
+      ) : null}
+      <View style={s.network}>
+        <View style={s.dot} />
+        <Txt style={s.small}>Development preview · Devnet · Test SKR</Txt>
+      </View>
+      <Txt style={s.credits}>{mediaCredits}</Txt>
+      {wallet.address && (
+        <Button
+          secondary
+          onPress={() =>
+            void wallet.disconnect().catch(() => notify('Could not disconnect the wallet. Try again.'))
+          }
+        >
+          Disconnect wallet
+        </Button>
+      )}
+    </ScrollView>
+  )
+}
+
+const s = StyleSheet.create({
+  content: { padding: 24, paddingTop: 30, maxWidth: 700, width: '100%', alignSelf: 'center' },
+  cover: {
+    minHeight: 175,
+    backgroundColor: c.pink,
+    borderRadius: 24,
+    overflow: 'hidden',
+    padding: 25,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  coverText: {
+    fontSize: 33,
+    lineHeight: 41,
+    color: c.ink,
+    flexBasis: 220,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  orbit: {
+    position: 'absolute',
+    width: 270,
+    height: 270,
+    borderWidth: 1,
+    borderColor: 'rgba(21,18,28,.2)',
+    borderRadius: 150,
+    right: -20,
+    top: -100,
+  },
+  identity: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: -26,
+    paddingHorizontal: 14,
+  },
+  name: { fontSize: 26, lineHeight: 34, marginTop: 20 },
+  bio: { color: c.muted, marginTop: 7, marginBottom: 20 },
+  stats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 20,
+    justifyContent: 'space-around',
+    borderBottomWidth: 1,
+    borderBottomColor: c.line,
+    paddingVertical: 28,
+    marginBottom: 30,
+  },
+  reward: { backgroundColor: c.surface, borderRadius: 22, padding: 22, borderWidth: 1, borderColor: c.line },
+  balance: {
+    backgroundColor: c.surface,
+    borderRadius: 20,
+    padding: 22,
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pending: {
+    gap: 13,
+    marginVertical: 18,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.yellow,
+    borderRadius: 18,
+    padding: 18,
+  },
+  emptyCreator: { gap: 12, padding: 21, backgroundColor: c.surface, borderRadius: 20 },
+  small: { fontSize: 12, color: c.muted, lineHeight: 19 },
+  error: { fontSize: 13, color: c.orange, marginVertical: 13 },
+  activity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: c.line,
+  },
+  network: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.lime },
+  credits: { fontSize: 11, color: c.muted, marginTop: 15, marginBottom: 25, lineHeight: 17 },
+})

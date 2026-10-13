@@ -1,0 +1,13 @@
+// A portable preview always uses Expo's local debug key, never production credentials.
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin('com.android.application') {
+        project.extensions.getByName('androidComponents').finalizeDsl { androidDsl ->
+            def previewSigning = androidDsl.signingConfigs.maybeCreate('cloutPreview')
+            previewSigning.storeFile = new File(project.projectDir, 'debug.keystore')
+            previewSigning.storePassword = 'android'
+            previewSigning.keyAlias = 'androiddebugkey'
+            previewSigning.keyPassword = 'android'
+            androidDsl.buildTypes.getByName('release').signingConfig = previewSigning
+        }
+    }
+}

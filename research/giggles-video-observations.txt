@@ -1,0 +1,45 @@
+# Giggles walkthrough: observed evidence
+
+Source: `/Users/linrabei/Downloads/RPReplay_Final1791843947.MP4` (4:14.87; creation metadata 2026-10-12; 1620×2160 iOS/iPad screen recording). Sampled frames every 10 seconds plus selected close-ups. Portuguese narration over English source videos. Automatic local transcription requires uncertainty labels, especially first 45 seconds where English media audio dominates.
+
+## Screen sequence
+
+| Time (approx) | Observed screen | Product meaning |
+|---|---|---|
+| 0:00–0:20 | Full-screen vertical video feed; plus top left, search top right, actions on right; bottom tabs Videos / Hub / Chats / Cards / Me | Content-first consumption loop; familiar short-video navigation |
+| 0:20–0:35 | Comments bottom sheet; comment rows may include Aura investment and red/green return badges; swipe/click to invest Aura bar | Social proof of investment attached to discussion |
+| 0:35 | Public profile with Aura, follower count, card count, Follow, Message, Gift; tabs Posts / Investments / Reposts | Status, social graph, and portfolio combined |
+| 0:40–1:15 | Video Aura investment screen: large current value and percent change since date, blue time-series chart, user avatars marking activity, LIVE / 1H / 1D / 1W / 1M / ALL, Invest more and Sell, own position/P&L, related videos | Core distinguishing mechanic: each content item supports investment and price-like social speculation |
+| 0:50–1:00 | Numeric entry modal; 25% / 50% / Max presets; swipe confirmation slider; adds Aura then sells | Low-friction buy/sell interaction; Clout can map deliberate confirmation to wallet approval |
+| 1:20–1:35 | Hub: search, notification prompt, refer friends earn 50 Aura, World and Clans avatar strips, Auctions / Marketplace toggle | Discovery and community with card commerce |
+| 1:35–1:40 | Live card auction: graded collectible illustration, rarity, bid history in Aura, countdown, Submit Bid | Timed auction with social competition |
+| 1:45 | Chats list with direct/group conversations and auction-related activity snippets; compose button | Social/notification surface merged |
+| 1:55–2:10 | Cards: total Aura, available balance, Get Aura, crates, horizontal October daily quest calendar, 3-column collectible album | Daily retention and collection progression |
+| 2:05–2:25 | Crate opening: vertical procession of physical graded-card objects over wood background; reveal focuses on Fanum Tax COMMON card with particles and number badge | Strong tactile reveal moment suitable for haptics/animation investment |
+| 2:35–2:45 | Cards album includes two Fanum Tax copies, colored owned cards, grey unowned cards | Duplicates have trade utility; visible collection gaps create goals |
+| 2:55–3:10 | Auction / Trade composer; add owned card area and starting-price action | Sell or barter acquired inventory |
+| 3:15–3:30 | Auction grid: image, Top bid, optional Buy now, time remaining, ended states; floating Auction / Trade CTA | Marketplace supports timed bidding plus direct purchases |
+| 3:35–3:50 | Own profile: Aura, followers, rank today, available balance, Edit profile, Earn 50 Aura; Posts / Investments / Reposts | Personal portfolio and reputation |
+| 3:50–4:00 | Get Aura bottom sheet remains loading | Purchase mechanism not observed |
+| 4:05–4:15 | Return to Hub auction grid | End of walkthrough |
+
+## Critical distinctions
+
+- Aura is the displayed unit throughout; no token address, wallet signing, blockchain explorer, or crypto transfer is observed.
+- Narrator calls the collectibles “NFTs,” but the UI alone does not establish on-chain ownership.
+- Investment chart value moves additively with stake: A2,893.37 with own A7 → A2,948.37 with own A62 after A55 added → A2,886.37 after all A62 sold. This is evidence of an aggregate Aura content value, not proof of a bonding curve or token market price.
+- P&L and investment badges exist, but the price/return computation is not revealed.
+- Card opening appears a reward for claiming a daily quest/crate. No paid random crate purchase is demonstrated.
+- Some blank videos, skeleton views, long loading, and a failed sale are visible. Robust caching, clear pending states, and predictable error recovery would make Clout materially smoother.
+
+## Useful frame files
+
+- `/tmp/clout-research/frames/t-020.jpg`: comments/investment context.
+- `/tmp/clout-research/frames/t-049.jpg`: investment chart with own A7.
+- `/tmp/clout-research/frames/t-054.jpg`: stake increased.
+- `/tmp/clout-research/frames/t-057.jpg`: sell keypad and swipe confirmation.
+- `/tmp/clout-research/frames/t-110.jpg`: card collection/quests.
+- `/tmp/clout-research/frames/t-121.jpg`: crate opening.
+- `/tmp/clout-research/frames/t-145.jpg`: collectible reveal.
+- `/tmp/clout-research/frames/t-188.jpg`: auction/trade flow.
+- Contact sheets: `/tmp/clout-research/sheet-0.jpg` through `sheet-3.jpg`.
