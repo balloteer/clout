@@ -56,6 +56,21 @@ npx tsx packages/markets/scripts/seed-sample-markets.ts verify
 
 The market extension reuses the existing task creator, curve configuration and mint, preserving the original 30 pool addresses. It does not create a new operator or transfer additional funding. These commands reuse persisted signed bytes and finalized receipts. An expired unknown or failed transaction requires inspection; no replacement launch is silently created. Mock SKR and all post tokens in this alpha have no monetary value.
 
+## Seeded portrait-market activity
+
+All 12 active portrait markets now contain real, explicitly labelled devnet activity from four dedicated operator wallets. The immutable campaign finalized 72 unique transactions: 54 buys and 18 partial sells. The first six markets have eight trades from four demo wallets; the other six have four trades from three demo wallets. Gross buys total 2,451 mock SKR from the 4,000 mock SKR previously allocated to those wallets. The campaign minted no additional tokens.
+
+The API graph uses the resulting verified transaction events and reports **Seeded demo activity** with exact trade and wallet counts. A read-only check against Supabase project `qsboauxywnuhitlpmojw` matched all 72 receipt signatures to finalized intents and indexed events, confirmed the canonical buy/sell order, and preserved all original 68 catalog records. The final receipt file has SHA-256 `8fd0be0b508ac63045c09ce9b7c4f89bc74203ce7be59ee8700d423fa2013ef2`. Local evidence is stored in ignored `artifacts/demo-activity-receipts.json` and `artifacts/portrait-activity-db-verification.json`.
+
+One market-four transaction was rejected by RPC preflight with `Blockhash not found`. Its signature never appeared on-chain, its database intent reached `expired`, and its signed journal remains archived. The seeder rebuilt that same bounded 27 mock-SKR action with a fresh quote and blockhash; the rejected signature is absent from the 72 final receipts. New runs persist broadcast state, refuse unknown expired outcomes, refresh transactions that are provably unsubmitted near expiry, and reuse locally verified receipts when resuming completed markets.
+
+```sh
+NO_DNA=1 node --env-file-if-exists=apps/api/.env.local --import tsx \
+  packages/markets/scripts/seed-demo-activity.ts run
+node --env-file-if-exists=apps/api/.env.local --import tsx \
+  .tooling/verify-portrait-activity.mjs
+```
+
 ## Earlier 68-market checkpoint
 
 All 38 missing markets were initialized on devnet, bringing the catalog to 68 distinct post mints and pools. The original 30 registrations remain unchanged. Each launch was simulated, journaled before broadcast, finalized and checked against the existing mock SKR mint, creator and curve configuration. Public receipts live in `packages/shared/src/sample-markets.ts`; no private keys are committed.

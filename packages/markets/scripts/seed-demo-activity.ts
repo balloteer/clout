@@ -1,10 +1,11 @@
 /** Real, explicitly labelled devnet activity. Default prepare mode never broadcasts. */
-import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { link, mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import {
   Connection,
   Keypair,
   PublicKey,
+  SendTransactionError,
   SystemProgram,
   Transaction,
   VersionedTransaction,
@@ -99,6 +100,60 @@ type Journal = {
   built: TransactionEnvelope
   trade?: BuiltTrade
   finalized?: boolean
+  broadcast?: {
+    state: 'not-attempted' | 'sending' | 'accepted' | 'not-submitted-expired' | 'preflight-rejected'
+    attemptedAt?: string
+    rpcSignature?: string
+    reason?: string
+  }
+}
+type Receipt = {
+  postId: string
+  wallet: string
+  demo: boolean
+  side: string
+  signature: string
+  slot: number
+  tokenDeltas: Record<string, string>
+  feeLamports: string | null
+  state: { state: string; signature: string | null; postId: string }
+}
+async function archivedUnsubmitted(
+  name: string,
+  journal: Journal,
+  state: 'not-submitted-expired' | 'preflight-rejected',
+  reason: string,
+) {
+  journal.broadcast = { state, reason }
+  await save(`${name}.json`, journal)
+  const source = resolve(directory, `${name}.json`),
+    archive = resolve(directory, `${name}.rejected-${journal.signature}.json`)
+  await link(source, archive)
+  await unlink(source)
+  const folder = await open(directory, 'r')
+  try {
+    await folder.sync()
+  } finally {
+    await folder.close()
+  }
+}
+function isExpiredBlockhashPreflight(error: unknown) {
+  return error instanceof SendTransactionError && /blockhash not found/i.test(error.message)
+}
+async function existingReceipts(): Promise<Receipt[]> {
+  try {
+    const stored = JSON.parse(await readFile('artifacts/demo-activity-receipts.json', 'utf8')) as {
+      network?: string
+      mint?: string
+      receipts?: Receipt[]
+    }
+    if (stored.network !== 'devnet' || stored.mint !== sampleQuoteMint || !Array.isArray(stored.receipts))
+      throw new Error('Existing demo receipt report has the wrong network or mint.')
+    return stored.receipts
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  }
 }
 async function submit(
   name: string,
@@ -111,68 +166,115 @@ async function submit(
 ) {
   await guard()
   let journal = await load<Journal>(`${name}.json`)
-  if (!journal) {
-    const built = await build()
-    if (built.cluster !== 'devnet' || built.owner !== signers[0].publicKey.toBase58())
-      throw new Error('Transaction owner/network mismatch.')
-    const tx = Transaction.from(Buffer.from(built.transactionBase64, 'base64'))
-    if (tx.serializeMessage().toString('base64') !== built.messageBase64)
-      throw new Error('Message binding mismatch.')
-    tx.partialSign(...signers)
-    if (!tx.signature) throw new Error('Missing signature.')
-    journal = {
-      built,
-      signature: bs58.encode(tx.signature),
-      signedBase64: tx.serialize().toString('base64'),
-      ...('quote' in built ? { trade: built as BuiltTrade } : {}),
+  for (let buildAttempt = 0; ; buildAttempt++) {
+    if (!journal) {
+      const built = await build()
+      if (built.cluster !== 'devnet' || built.owner !== signers[0].publicKey.toBase58())
+        throw new Error('Transaction owner/network mismatch.')
+      const tx = Transaction.from(Buffer.from(built.transactionBase64, 'base64'))
+      if (tx.serializeMessage().toString('base64') !== built.messageBase64)
+        throw new Error('Message binding mismatch.')
+      tx.partialSign(...signers)
+      if (!tx.signature) throw new Error('Missing signature.')
+      journal = {
+        built,
+        signature: bs58.encode(tx.signature),
+        signedBase64: tx.serialize().toString('base64'),
+        ...('quote' in built ? { trade: built as BuiltTrade } : {}),
+        broadcast: { state: 'not-attempted' },
+      }
+      await save(`${name}.json`, journal)
     }
-    await save(`${name}.json`, journal)
-  }
-  const persisted = Transaction.from(Buffer.from(journal.signedBase64, 'base64'))
-  if (
-    journal.built.cluster !== 'devnet' ||
-    journal.built.owner !== signers[0].publicKey.toBase58() ||
-    persisted.serializeMessage().toString('base64') !== journal.built.messageBase64 ||
-    !persisted.signature ||
-    bs58.encode(persisted.signature) !== journal.signature ||
-    !persisted.verifySignatures() ||
-    (journal.trade && JSON.stringify(journal.trade) !== JSON.stringify(journal.built))
-  )
-    throw new Error('Persisted transaction binding mismatch.')
-  // The exact transaction and intent must both be durable before a possible broadcast.
-  if (hooks) {
-    if (!journal.trade) throw new Error('Trade journal required.')
-    await hooks.prepared(journal.trade)
-    await hooks.signed(journal.trade.quoteId, journal.signature)
-  }
-  const status = (
-    await connection.getSignatureStatuses([journal.signature], { searchTransactionHistory: true })
-  ).value[0]
-  if (status?.err) throw new Error(`${name}: failed transaction requires review.`)
-  const confirmation = hooks ? 'confirmed' : 'finalized'
-  if (
-    status?.confirmationStatus !== 'finalized' &&
-    !(confirmation === 'confirmed' && status?.confirmationStatus === 'confirmed')
-  ) {
-    if (!status && (await connection.getBlockHeight('finalized')) > journal.built.lastValidBlockHeight)
-      throw new Error(`${name}: unknown expired transaction; no automatic replacement.`)
-    await connection.sendRawTransaction(Buffer.from(journal.signedBase64, 'base64'), {
-      skipPreflight: false,
-      maxRetries: 3,
-    })
-    const result = await connection.confirmTransaction(
-      {
-        signature: journal.signature,
-        blockhash: journal.built.blockhash,
-        lastValidBlockHeight: journal.built.lastValidBlockHeight,
-      },
-      confirmation,
+    const persisted = Transaction.from(Buffer.from(journal.signedBase64, 'base64'))
+    if (
+      journal.built.cluster !== 'devnet' ||
+      journal.built.owner !== signers[0].publicKey.toBase58() ||
+      persisted.serializeMessage().toString('base64') !== journal.built.messageBase64 ||
+      !persisted.signature ||
+      bs58.encode(persisted.signature) !== journal.signature ||
+      !persisted.verifySignatures() ||
+      (journal.trade && JSON.stringify(journal.trade) !== JSON.stringify(journal.built))
     )
-    if (result.value.err) throw new Error(`${name}: chain rejected transaction.`)
+      throw new Error('Persisted transaction binding mismatch.')
+    if (
+      journal.broadcast?.state === 'not-submitted-expired' ||
+      journal.broadcast?.state === 'preflight-rejected'
+    )
+      throw new Error(`${name}: rejected transaction journal must remain archived.`)
+    // The exact transaction and intent must both be durable before a possible broadcast.
+    if (hooks) {
+      if (!journal.trade) throw new Error('Trade journal required.')
+      await hooks.prepared(journal.trade)
+      await hooks.signed(journal.trade.quoteId, journal.signature)
+    }
+    const status = (
+      await connection.getSignatureStatuses([journal.signature], { searchTransactionHistory: true })
+    ).value[0]
+    if (status?.err) throw new Error(`${name}: failed transaction requires review.`)
+    const confirmation = hooks ? 'confirmed' : 'finalized'
+    if (
+      status?.confirmationStatus !== 'finalized' &&
+      !(confirmation === 'confirmed' && status?.confirmationStatus === 'confirmed')
+    ) {
+      const height = !status ? await connection.getBlockHeight('confirmed') : 0
+      if (!status && height > journal.built.lastValidBlockHeight)
+        throw new Error(`${name}: unknown expired transaction; no automatic replacement.`)
+      if (
+        !status &&
+        journal.broadcast?.state === 'not-attempted' &&
+        height + 20 >= journal.built.lastValidBlockHeight
+      ) {
+        if (buildAttempt >= 1)
+          throw new Error(`${name}: transaction lifetime expired twice before submission.`)
+        await archivedUnsubmitted(
+          name,
+          journal,
+          'not-submitted-expired',
+          'Fresh-height guard prevented submission near expiry.',
+        )
+        journal = null
+        continue
+      }
+      journal.broadcast = { state: 'sending', attemptedAt: new Date().toISOString() }
+      await save(`${name}.json`, journal)
+      try {
+        const rpcSignature = await connection.sendRawTransaction(
+          Buffer.from(journal.signedBase64, 'base64'),
+          { skipPreflight: false, maxRetries: 3 },
+        )
+        if (rpcSignature !== journal.signature) throw new Error('RPC returned a different signature.')
+        journal.broadcast = {
+          state: 'accepted',
+          attemptedAt: journal.broadcast.attemptedAt,
+          rpcSignature,
+        }
+        await save(`${name}.json`, journal)
+      } catch (error) {
+        if (!isExpiredBlockhashPreflight(error)) throw error
+        if (buildAttempt >= 1) throw error
+        await archivedUnsubmitted(
+          name,
+          journal,
+          'preflight-rejected',
+          'RPC preflight rejected the expired blockhash.',
+        )
+        journal = null
+        continue
+      }
+      const result = await connection.confirmTransaction(
+        {
+          signature: journal.signature,
+          blockhash: journal.built.blockhash,
+          lastValidBlockHeight: journal.built.lastValidBlockHeight,
+        },
+        confirmation,
+      )
+      if (result.value.err) throw new Error(`${name}: chain rejected transaction.`)
+    }
+    journal.finalized = status?.confirmationStatus === 'finalized' || confirmation === 'finalized'
+    await save(`${name}.json`, journal)
+    return journal
   }
-  journal.finalized = status?.confirmationStatus === 'finalized' || confirmation === 'finalized'
-  await save(`${name}.json`, journal)
-  return journal
 }
 async function envelope(tx: Transaction, owner: PublicKey): Promise<TransactionEnvelope> {
   const lifetime = await connection.getLatestBlockhash('confirmed')
@@ -366,20 +468,57 @@ async function main() {
     const db = new PostgresRepository(target.url.toString())
     repository = db
     const recorder = new DemoActivityRecorder(db, service, connection)
-    const report: {
-      postId: string
-      wallet: string
-      demo: boolean
-      side: string
-      signature: string
-      slot: number
-      tokenDeltas: Record<string, string>
-      feeLamports: string | null
-      state: { state: string; signature: string | null; postId: string }
-    }[] = []
+    const storedReceipts = await existingReceipts()
+    const report: Receipt[] = []
     for (const [marketIndex, plan] of requested.markets.entries()) {
       const market = sampleMarkets[plan.postId]
       const batch: { name: string; journal: Journal }[] = []
+      if (mode === 'run') {
+        const checkpoint = await load<Record<string, unknown>>(`${plan.postId}.verified.json`)
+        const completed = await Promise.all(
+          plan.actions.map((_, index) =>
+            load<Journal>(`${plan.postId}-${String(index + 1).padStart(2, '0')}.json`),
+          ),
+        )
+        if (
+          checkpoint?.postId === plan.postId &&
+          checkpoint.dbcPool === market.dbcPool &&
+          checkpoint.quoteMint === sampleQuoteMint &&
+          checkpoint.status === 'dbc' &&
+          completed.every((journal) => journal?.finalized)
+        ) {
+          const resumed = completed.map((journal, index) => {
+            const action = plan.actions[index],
+              wallet = wallets[action.walletIndex].publicKey.toBase58(),
+              matches = storedReceipts.filter(
+                (receipt) =>
+                  receipt.signature === journal!.signature &&
+                  receipt.postId === plan.postId &&
+                  receipt.wallet === wallet &&
+                  receipt.side === action.side &&
+                  receipt.demo === true &&
+                  receipt.state.state === 'finalized' &&
+                  receipt.state.signature === journal!.signature &&
+                  receipt.state.postId === plan.postId &&
+                  receipt.slot > 0 &&
+                  typeof receipt.tokenDeltas[market.baseMint] === 'string' &&
+                  typeof receipt.tokenDeltas[sampleQuoteMint] === 'string',
+              )
+            if (matches.length !== 1) throw new Error('Finalized checkpoint receipt mismatch.')
+            return matches[0]
+          })
+          report.push(...resumed)
+          console.log(
+            JSON.stringify({
+              market: marketIndex + 1,
+              postId: plan.postId,
+              finalizedTrades: resumed.length,
+              resumed: true,
+            }),
+          )
+          continue
+        }
+      }
       for (const [index, action] of plan.actions.entries()) {
         const name = `${plan.postId}-${String(index + 1).padStart(2, '0')}`
         const owner = wallets[action.walletIndex]
