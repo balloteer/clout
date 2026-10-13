@@ -9,7 +9,7 @@ import {
   type PropsWithChildren,
 } from 'react'
 import { api, API_URL } from './api'
-import { samplePosts, type Post } from './data'
+import { allCatalogPosts, archivedPosts, samplePosts, type Post } from './data'
 import { mapPost, type ApiPost } from './contracts'
 import { mergePreviewFeed } from './catalog'
 import { useWallet } from './wallet'
@@ -29,8 +29,8 @@ type Store = {
 }
 const Context = createContext<Store | null>(null)
 const sampleKey = 'clout:preferences'
-const sampleIds = new Set(samplePosts.map((post) => post.id))
-const sampleNames = new Set(samplePosts.map((post) => post.creator))
+const sampleIds = new Set(allCatalogPosts.map((post) => post.id))
+const sampleNames = new Set(allCatalogPosts.map((post) => post.creator))
 
 export function AppStore({ children }: PropsWithChildren) {
   const wallet = useWallet()
@@ -113,7 +113,13 @@ function ScopedStore({ children, owner }: PropsWithChildren<{ owner?: string }>)
           revision.current !== currentRevision
         )
           return
-        setPosts(mergePreviewFeed(samplePosts, result.posts.map(mapPost)))
+        const archivedIds = new Set(archivedPosts.map((post) => post.id))
+        setPosts(
+          mergePreviewFeed(
+            samplePosts,
+            result.posts.filter((post) => !archivedIds.has(post.id)).map(mapPost),
+          ),
+        )
         setFeedOwner(owner)
         setLiveLiked(
           owner ? result.posts.filter((post) => !post.demo && post.likes?.liked).map((post) => post.id) : [],
@@ -130,7 +136,7 @@ function ScopedStore({ children, owner }: PropsWithChildren<{ owner?: string }>)
   }, [refresh])
 
   function toggleLike(id: string) {
-    const post = posts.find((item) => item.id === id)
+    const post = [...posts, ...archivedPosts].find((item) => item.id === id)
     if (!post || !loaded || scope !== owner) return
     if (post.sample) {
       setSamples((value) => ({ ...value, liked: toggleItem(value.liked, id) }))
@@ -177,7 +183,7 @@ function ScopedStore({ children, owner }: PropsWithChildren<{ owner?: string }>)
     else setLiveSaved((value) => toggleItem(value, id))
   }
   function toggleFollow(name: string) {
-    const post = posts.find((item) => item.creator === name)
+    const post = [...posts, ...archivedPosts].find((item) => item.creator === name)
     if (!post || !loaded || scope !== owner) return
     if (post.sample) {
       setSamples((value) => ({ ...value, following: toggleItem(value.following, name) }))

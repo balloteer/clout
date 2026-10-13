@@ -8,6 +8,7 @@ import { Connection } from '@solana/web3.js'
 import { createMarketService, DEVNET_GENESIS_HASH } from '../packages/markets/src/index.ts'
 import { demoPosts, demoProfiles } from '../apps/api/src/fixtures.ts'
 import { sampleContent } from '../packages/shared/src/sample-content.ts'
+import { originalCuratedContent } from '../packages/shared/src/curated-content.ts'
 import { sampleMarkets, sampleQuoteMint, sampleMarketConfig } from '../packages/shared/src/sample-markets.ts'
 import { validateTarget, SetupError } from './db-setup.mjs'
 import { databaseTls } from './db-tls.mjs'
@@ -24,8 +25,10 @@ export function buildSampleSeed(mediaOrigin, registry = sampleMarkets) {
     origin.hash
   )
     throw new SetupError('Use an HTTPS API origin, or a loopback HTTP API for local development.')
-  if (demoPosts.length !== 68 || Object.keys(registry).length !== 68)
-    throw new SetupError('The verified 68-post/68-market catalog is incomplete.')
+  if (Object.keys(registry).length !== demoPosts.length || demoPosts.length < 68 || demoPosts.length > 100)
+    throw new SetupError(
+      'The verified active and archived market catalog is incomplete or exceeds the feed bound.',
+    )
   const mints = new Set()
   const pools = new Set()
   for (const post of demoPosts) {
@@ -101,6 +104,7 @@ export async function seedInTransaction(db, seed, apply = false) {
   ).rows
   const byId = new Map(existing.map((row) => [row.id, row]))
   const upgrades = []
+  const visibility = []
   for (const post of seed.posts) {
     const row = byId.get(post.id)
     if (!row) continue
@@ -109,7 +113,18 @@ export async function seedInTransaction(db, seed, apply = false) {
       row.creator_wallet === previous?.creatorWallet &&
       row.status === previous?.status &&
       row.stream_uid === previous?.streamUid
-    if (consistent && fingerprint(previous) === fingerprint(post)) continue
+    if (consistent && fingerprint(previous) === fingerprint(post)) {
+      if ((previous.feedHidden === true) !== (post.feedHidden === true)) {
+        if (
+          !originalCuratedContent.some((entry) => entry.id === post.id) ||
+          previous.demo !== true ||
+          !previous.market
+        )
+          throw new SetupError('Only an exact archived operator catalog post may change feed visibility.')
+        visibility.push(post)
+      }
+      continue
+    }
     // Only the original licensed sample row may gain its first market. Match
     // every catalog field, preserving timestamps, extra JSON fields and socials.
     const editorial = sampleContent.find((sample) => sample.id === post.id)
@@ -152,6 +167,18 @@ export async function seedInTransaction(db, seed, apply = false) {
       if (updated.rows.length !== 1 || fingerprint(updated.rows[0].data) !== fingerprint(post))
         throw new SetupError('Seed market attachment failed; transaction must be rolled back.')
     }
+    for (const post of visibility) {
+      const updated = await db.query(
+        'update public.posts set data=data || $2::jsonb where id=$1 returning data',
+        [post.id, { feedHidden: post.feedHidden === true }],
+      )
+      if (
+        updated.rows.length !== 1 ||
+        fingerprint(updated.rows[0].data) !== fingerprint(post) ||
+        updated.rows[0].data.feedHidden !== (post.feedHidden === true)
+      )
+        throw new SetupError('Catalog visibility update failed; transaction must be rolled back.')
+    }
   }
   return {
     mode: apply ? 'applied' : 'dry-run',
@@ -159,7 +186,9 @@ export async function seedInTransaction(db, seed, apply = false) {
     verifiedMarkets: seed.posts.filter((post) => post.market).length,
     newPosts: pending.length,
     attachedMarkets: upgrades.length,
-    unchangedPosts: existing.length - upgrades.length,
+    visibilityUpdates: visibility.length,
+    visiblePosts: seed.posts.filter((post) => post.feedHidden !== true).length,
+    unchangedPosts: existing.length - upgrades.length - visibility.length,
   }
 }
 async function main() {

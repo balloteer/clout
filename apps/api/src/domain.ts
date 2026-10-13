@@ -27,6 +27,8 @@ export interface Post {
   status: 'processing' | 'ready' | 'failed'
   createdAt: string
   demo: boolean
+  /** Operator catalog visibility only; hidden posts and their trades remain addressable. */
+  feedHidden?: boolean
   tags: string[]
   market: { baseMint: string; dbcPool: string } | null
   source?: {
@@ -110,6 +112,7 @@ export interface IndexedEvent {
   baseAmount: string
   quoteAmount: string
   finality: 'confirmed' | 'finalized'
+  demoActivity?: boolean
 }
 export interface TransactionIntent {
   id: string
@@ -131,7 +134,7 @@ export interface Repository {
   getProfile(wallet: string): Promise<Profile | null>
   listProfiles(): Promise<Profile[]>
   saveProfile(profile: Profile): Promise<void>
-  listPosts(): Promise<Post[]>
+  listPosts(options?: { includeHidden?: boolean }): Promise<Post[]>
   getPostSummaries(postIds: string[], wallet?: string): Promise<Record<string, PostSummary>>
   listOwnPosts(wallet: string): Promise<Post[]>
   getPost(id: string): Promise<Post | null>

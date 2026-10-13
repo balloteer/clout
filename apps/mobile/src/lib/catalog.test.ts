@@ -2,8 +2,19 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { filterFeedPosts, interleaveMarkets, mergePreviewFeed } from './catalog'
 import curatedContent from './curated-content.json'
+import archivedContent from '../../../../packages/shared/src/archived-curated-content.json'
 import { sampleContent } from '../../../../packages/shared/src/sample-content'
 import { sampleMarkets } from '../../../../packages/shared/src/sample-markets'
+
+test('featured videos have reviewed portrait dimensions and original attribution', () => {
+  assert.ok(curatedContent.length >= 12)
+  for (const post of curatedContent) {
+    assert.ok(post.width > 0 && post.height >= 720, post.id)
+    assert.ok(post.width / post.height <= 0.65, `${post.id} must be a native portrait source`)
+    assert.ok(post.durationSeconds > 0 && post.durationSeconds <= 90, post.id)
+    assert.equal(post.source.url, `https://x.com/${post.source.handle}/status/${post.id.slice(2)}`)
+  }
+})
 
 test('API refresh preserves curated videos and bundled samples alongside community posts', () => {
   const preview = [
@@ -25,7 +36,7 @@ test('API refresh preserves curated videos and bundled samples alongside communi
   )
 })
 
-test('the full catalog retains all 68 markets and curated videos after API refresh', () => {
+test('the active portrait catalog retains its markets and order after API refresh', () => {
   const preview = [
     ...curatedContent.map((post) => ({
       id: post.id,
@@ -40,13 +51,15 @@ test('the full catalog retains all 68 markets and curated videos after API refre
   ]
   const initial = interleaveMarkets(preview)
   const refreshed = mergePreviewFeed(initial, [...preview].reverse())
-  assert.equal(initial.length, 68)
+  const expectedCount = sampleContent.length + curatedContent.length
+  assert.ok(expectedCount >= 50)
+  assert.equal(initial.length, expectedCount)
   assert.equal(initial[0].market, true)
   assert.equal(initial[0].id, curatedContent[0].id)
   assert.deepEqual(refreshed, initial, 'API hydration preserves catalog order without duplicate posts')
-  assert.equal(new Set(refreshed.map((post) => post.id)).size, 68)
+  assert.equal(new Set(refreshed.map((post) => post.id)).size, expectedCount)
   const markets = filterFeedPosts(refreshed, 'markets', [])
-  assert.equal(markets.length, 68)
+  assert.equal(markets.length, expectedCount)
   assert.ok(markets.every((post) => post.market && sampleMarkets[post.id]))
   assert.deepEqual(filterFeedPosts(refreshed, 'for-you', []), refreshed)
   assert.deepEqual(
@@ -55,10 +68,9 @@ test('the full catalog retains all 68 markets and curated videos after API refre
   )
 })
 
-test('each catalog post has a distinct registered market and launch receipt', () => {
-  const ids = [...curatedContent, ...sampleContent].map((post) => post.id)
-  assert.equal(ids.length, 68)
-  assert.equal(new Set(ids).size, ids.length)
+test('active and retired catalog posts retain distinct registered markets and launch receipts', () => {
+  const ids = [...new Set([...curatedContent, ...archivedContent, ...sampleContent].map((post) => post.id))]
+  assert.ok(ids.length >= 68, 'all original market registrations remain available')
   assert.deepEqual(Object.keys(sampleMarkets).sort(), [...ids].sort())
   const registrations = ids.map((id) => {
     const market = sampleMarkets[id]

@@ -105,6 +105,33 @@ test('public video activity separates a live pool balance from an empty recorded
   }
 })
 
+test('hidden operator catalog posts leave discovery but keep direct access and history', async () => {
+  const app = await fixture(undefined, async (repository) => {
+    repository.posts.get('big-buck-bunny')!.feedHidden = true
+    return {}
+  })
+  try {
+    assert.equal(
+      (await app.request('/v1/feed')).data.posts.some((post: { id: string }) => post.id === 'big-buck-bunny'),
+      false,
+    )
+    assert.equal(
+      (await app.request('/v1/discover?q=big-buck-bunny')).data.posts.some(
+        (post: { id: string }) => post.id === 'big-buck-bunny',
+      ),
+      false,
+    )
+    assert.equal((await app.request('/v1/posts/big-buck-bunny')).status, 200)
+    assert.equal((await app.request('/v1/posts/big-buck-bunny/activity')).status, 200)
+    assert.equal(
+      (await app.repository.listPosts({ includeHidden: true })).some((post) => post.id === 'big-buck-bunny'),
+      true,
+    )
+  } finally {
+    await app.close()
+  }
+})
+
 test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logout', async () => {
   const app = await fixture()
   try {

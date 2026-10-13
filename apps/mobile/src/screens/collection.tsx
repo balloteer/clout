@@ -18,7 +18,7 @@ import { mapPost, type Portfolio } from '../lib/contracts'
 import { colors as c } from '../lib/theme'
 import { Badge, Button, Empty, Icon, Txt } from '../components/ui'
 import { Sheet } from '../components/sheets'
-import { imageSource, type Post } from '../lib/data'
+import { archivedPosts, imageSource, type Post } from '../lib/data'
 
 type Position = Portfolio['positions'][number]
 
@@ -139,7 +139,10 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
   const [error, setError] = useState('')
   const [receipt, setReceipt] = useState<Position | null>(null)
   const generation = useRef(0)
-  const items = posts.filter((post) => saved.includes(post.id))
+  const items = [
+    ...posts,
+    ...archivedPosts.filter((post) => !posts.some((active) => active.id === post.id)),
+  ].filter((post) => saved.includes(post.id))
   const load = useCallback(async () => {
     if (!wallet.address || !API_URL) return
     const version = ++generation.current

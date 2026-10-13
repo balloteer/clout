@@ -89,7 +89,9 @@ try {
       width: video.videoWidth,
       height: video.videoHeight,
     }))
-    assert.equal(metrics.fit, 'contain')
+    assert.equal(metrics.fit, 'cover')
+    assert.ok(metrics.width / metrics.height <= 0.65, 'Featured source must be portrait')
+    assert.ok(metrics.height >= 720, 'Featured source must remain readable on Seeker')
     assert.equal(await page.locator('video').count(), 1)
     const source = page.getByRole('link', {
       name: `View original post by @${expected.source.handle}`,
@@ -147,8 +149,9 @@ try {
   await page.getByRole('tab', { name: 'Discover', exact: true }).click()
   for (const tag of ['Solana', 'SKR', 'AI']) {
     await page.getByRole('button', { name: tag, exact: true }).click()
-    await page.getByText('6 posts', { exact: true }).waitFor()
-    report.filters[tag] = 6
+    const count = catalog.filter((post) => post.tag === tag).length
+    await page.getByText(`${count} ${count === 1 ? 'post' : 'posts'}`, { exact: true }).waitFor()
+    report.filters[tag] = count
   }
   await page.getByRole('tab', { name: 'Feed', exact: true }).click()
   await page.setViewportSize({ width: 320, height: 568 })

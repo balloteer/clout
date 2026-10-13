@@ -27,6 +27,7 @@ import { linkedUnavailable, type LinkedAccountService } from './linked-accounts.
 import { unavailableFaucet, type FaucetService } from './faucet.js'
 import { handleSampleMedia } from './sample-media.js'
 import { investmentHistory, MarketMetrics } from './market-metrics.js'
+import { isDemoActivityEvent } from './demo-activity.js'
 
 export interface AppOptions {
   repository: Repository
@@ -592,21 +593,27 @@ export function createApp(options: AppOptions) {
       if (method === 'GET' && activityMatch) {
         const post = await requirePost(activityMatch[1])
         const [recorded, pool] = await Promise.all([repository.getPostEvents(post.id), metrics.read(post)])
-        const events = recorded.map(({ signature, slot, kind, baseAmount, quoteAmount, finality }) => ({
-          signature,
-          slot,
-          kind,
-          baseAmount,
-          quoteAmount,
-          finality,
-        }))
+        const events = recorded.map((event) => {
+          const { signature, slot, kind, baseAmount, quoteAmount, finality } = event
+          return {
+            signature,
+            slot,
+            kind,
+            baseAmount,
+            quoteAmount,
+            finality,
+            ...(isDemoActivityEvent(event) ? { demoActivity: true } : {}),
+          }
+        })
+        const history = investmentHistory(recorded)
         send(200, {
           events,
           baseDecimals: 6,
           quoteDecimals: options.quoteDecimals ?? 6,
           source: 'clout-transactions',
           pool,
-          investmentHistory: investmentHistory(recorded),
+          investmentHistory: history,
+          demoActivity: !!history.demo,
         })
         return
       }
@@ -802,7 +809,7 @@ export function createApp(options: AppOptions) {
           amounts.set(info.mint, (amounts.get(info.mint) ?? 0n) + BigInt(info.tokenAmount.amount))
         }
         const positions = await Promise.all(
-          (await repository.listPosts())
+          (await repository.listPosts({ includeHidden: true }))
             .filter((post) => post.market && (amounts.get(post.market.baseMint) ?? 0n) > 0n)
             .map(async (post) => {
               const amount = amounts.get(post.market!.baseMint)!.toString()

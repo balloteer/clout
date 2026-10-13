@@ -1,0 +1,254 @@
+[
+  {
+    "id": "x-1984048092786860037",
+    "creator": "Solana",
+    "caption": "Anatoly Yakovenko reflects on Solana’s launch and network growth.",
+    "tag": "Solana",
+    "video": "https://video.twimg.com/amplify_video/1984047978361843713/vid/avc1/1288x720/iLTfT5bU3-nlFbS_.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/1984047978361843713/img/KJ1MB8hqolQM1BwT.jpg",
+    "durationSeconds": 53,
+    "source": {
+      "url": "https://x.com/solana/status/1984048092786860037",
+      "handle": "solana",
+      "publishedAt": "2025-10-31T00:01:41.000Z"
+    }
+  },
+  {
+    "id": "x-2011476349597229548",
+    "creator": "Seeker | Solana Mobile",
+    "caption": "Solana Mobile’s January 2026 preview of the SKR allocation checker.",
+    "tag": "SKR",
+    "video": "https://video.twimg.com/amplify_video/2011467417294372864/vid/avc1/720x720/hlfbUs5ZEVM2WRBs.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/2011467417294372864/img/QoK4vPY9qa_TOEaO.jpg",
+    "durationSeconds": 11,
+    "source": {
+      "url": "https://x.com/solanamobile/status/2011476349597229548",
+      "handle": "solanamobile",
+      "publishedAt": "2026-01-14T16:31:47.000Z"
+    }
+  },
+  {
+    "id": "x-2083749667410727319",
+    "creator": "Andrej Karpathy",
+    "caption": "Andrej Karpathy shares an AI-coded Three.js scene inspired by The Lord of the Rings.",
+    "tag": "AI",
+    "video": "https://video.twimg.com/amplify_video/2083744791876292608/vid/avc1/1280x720/8ii9jh8COyGAF3iY.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/2083744791876292608/img/tWEKnM_bdE_nlfYD.jpg",
+    "durationSeconds": 93,
+    "source": {
+      "url": "https://x.com/karpathy/status/2083749667410727319",
+      "handle": "karpathy",
+      "publishedAt": "2026-08-02T03:00:09.000Z"
+    }
+  },
+  {
+    "id": "x-1985363167153647945",
+    "creator": "Solana",
+    "caption": "A 2025 preview of the Alpenglow consensus upgrade from Solana’s cofounder.",
+    "tag": "Solana",
+    "video": "https://video.twimg.com/amplify_video/1985363077156458499/vid/avc1/1280x720/G7esbJnwsLIJ8q5Y.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/1985363077156458499/img/U6pnOJxL8UTf7J__.jpg",
+    "durationSeconds": 22,
+    "source": {
+      "url": "https://x.com/solana/status/1985363167153647945",
+      "handle": "solana",
+      "publishedAt": "2025-11-03T15:07:19.000Z"
+    }
+  },
+  {
+    "id": "x-2013794341614166152",
+    "creator": "Seeker | Solana Mobile",
+    "caption": "Solana Mobile introduces SKR and its role in the mobile ecosystem.",
+    "tag": "SKR",
+    "video": "https://video.twimg.com/amplify_video/2013786658781749248/vid/avc1/1280x720/_Fq085fhnYpxkW-c.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/2013786658781749248/img/hb32PKua111ZK3WM.jpg",
+    "durationSeconds": 121,
+    "source": {
+      "url": "https://x.com/solanamobile/status/2013794341614166152",
+      "handle": "solanamobile",
+      "publishedAt": "2026-01-21T02:02:40.000Z"
+    }
+  },
+  {
+    "id": "x-2080333504446108104",
+    "creator": "Andrew Ng",
+    "caption": "Andrew Ng demonstrates an agent designed to produce finished work.",
+    "tag": "AI",
+    "video": "https://video.twimg.com/amplify_video/2080332687571886080/vid/avc1/958x720/H4hCnAJ4kaVnT8-B.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/2080332687571886080/img/lsEwhZahLuR12r0p.jpg",
+    "durationSeconds": 35,
+    "source": {
+      "url": "https://x.com/AndrewYNg/status/2080333504446108104",
+      "handle": "AndrewYNg",
+      "publishedAt": "2026-07-23T16:45:32.000Z"
+    }
+  },
+  {
+    "id": "x-1712853175898878273",
+    "creator": "Solana",
+    "caption": "Helius founder Mert Mumtaz discusses the people and technology behind Solana.",
+    "tag": "Solana",
+    "video": "https://video.twimg.com/amplify_video/1712150225962618880/vid/avc1/1280x720/CuO98hKj4z8D2odf.mp4?tag=16",
+    "poster": "https://pbs.twimg.com/media/F8VF0GmbYAArTll.jpg",
+    "durationSeconds": 187,
+    "source": {
+      "url": "https://x.com/solana/status/1712853175898878273",
+      "handle": "solana",
+      "publishedAt": "2023-10-13T15:29:55.000Z"
+    }
+  },
+  {
+    "id": "x-2018381131914084654",
+    "creator": "Seeker | Solana Mobile",
+    "caption": "A look back at the 2026 mobile hackathon and its SKR integration track.",
+    "tag": "SKR",
+    "video": "https://video.twimg.com/amplify_video/2018380352465629184/vid/avc1/1080x720/2lV7n3F4CWChc64b.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/2018380352465629184/img/HCryB6wsGp95s-6M.jpg",
+    "durationSeconds": 28,
+    "source": {
+      "url": "https://x.com/solanamobile/status/2018381131914084654",
+      "handle": "solanamobile",
+      "publishedAt": "2026-02-02T17:48:56.000Z"
+    }
+  },
+  {
+    "id": "x-1975614372799283423",
+    "creator": "Andrew Ng",
+    "caption": "Andrew Ng previews his course on designing and building AI agents.",
+    "tag": "AI",
+    "video": "https://video.twimg.com/amplify_video/1975612300506898436/vid/avc1/1280x720/sIivktcII75OuoYz.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/1975612300506898436/img/N8hxTf__L3O_qVDF.jpg",
+    "durationSeconds": 155,
+    "source": {
+      "url": "https://x.com/AndrewYNg/status/1975614372799283423",
+      "handle": "AndrewYNg",
+      "publishedAt": "2025-10-07T17:29:06.000Z"
+    }
+  },
+  {
+    "id": "x-1873788725312049528",
+    "creator": "mert",
+    "caption": "A founder-focused introduction to the Helius startup mentorship program.",
+    "tag": "Solana",
+    "video": "https://video.twimg.com/ext_tw_video/1873782075926417408/pu/vid/avc1/1280x720/s9NgpFIFuRzDvtYU.mp4?tag=12",
+    "poster": "https://pbs.twimg.com/ext_tw_video_thumb/1873782075926417408/pu/img/uQ42SyqwZ2SJ1BAJ.jpg",
+    "durationSeconds": 64,
+    "source": {
+      "url": "https://x.com/mert/status/1873788725312049528",
+      "handle": "mert",
+      "publishedAt": "2024-12-30T17:50:20.000Z"
+    }
+  },
+  {
+    "id": "x-1836614409613119632",
+    "creator": "Seeker | Solana Mobile",
+    "caption": "The original Seeker device reveal from Solana Mobile.",
+    "tag": "SKR",
+    "video": "https://video.twimg.com/ext_tw_video/1836605727504502784/pu/vid/avc1/1280x720/p4CYCSqTF6YoH-o-.mp4?tag=14",
+    "poster": "https://pbs.twimg.com/ext_tw_video_thumb/1836605727504502784/pu/img/4tg4Ofa3KSi9y4s-.jpg",
+    "durationSeconds": 41,
+    "source": {
+      "url": "https://x.com/solanamobile/status/1836614409613119632",
+      "handle": "solanamobile",
+      "publishedAt": "2024-09-19T03:52:52.000Z"
+    }
+  },
+  {
+    "id": "x-1924819887139987855",
+    "creator": "Jim Fan",
+    "caption": "A research demo of robot learning with generated visual experience.",
+    "tag": "AI",
+    "video": "https://video.twimg.com/amplify_video/1924798914617618432/vid/avc1/1280x720/9Q5CtihcKjVPQp5x.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/1924798914617618432/img/jR4iCLnHkE-ysGQt.jpg",
+    "durationSeconds": 59,
+    "source": {
+      "url": "https://x.com/DrJimFan/status/1924819887139987855",
+      "handle": "DrJimFan",
+      "publishedAt": "2025-05-20T13:29:57.000Z"
+    }
+  },
+  {
+    "id": "x-1837035324587028567",
+    "creator": "Solana",
+    "caption": "The Breakpoint 2024 announcement of Frankendancer’s mainnet launch.",
+    "tag": "Solana",
+    "video": "https://video.twimg.com/ext_tw_video/1837034216695156737/pu/vid/avc1/1280x720/AgHvi9xCokV3eUmE.mp4?tag=14",
+    "poster": "https://pbs.twimg.com/ext_tw_video_thumb/1837034216695156737/pu/img/i1TmlRfIdwTI5_uX.jpg",
+    "durationSeconds": 52,
+    "source": {
+      "url": "https://x.com/solana/status/1837035324587028567",
+      "handle": "solana",
+      "publishedAt": "2024-09-20T07:45:26.000Z"
+    }
+  },
+  {
+    "id": "x-1996278509967434017",
+    "creator": "Seeker | Solana Mobile",
+    "caption": "Solana Mobile’s December 2025 announcement ahead of the SKR launch.",
+    "tag": "SKR",
+    "video": "https://video.twimg.com/amplify_video/1996268527612047360/vid/avc1/720x720/tQkwu7PDRFU-M-xD.mp4",
+    "poster": "https://pbs.twimg.com/media/G7Q2j8KbkAAeFFU.jpg",
+    "durationSeconds": 10,
+    "source": {
+      "url": "https://x.com/solanamobile/status/1996278509967434017",
+      "handle": "solanamobile",
+      "publishedAt": "2025-12-03T18:01:00.000Z"
+    }
+  },
+  {
+    "id": "x-1886824152272920642",
+    "creator": "Jim Fan",
+    "caption": "Jim Fan shares humanoid robot motion learned through reinforcement learning.",
+    "tag": "AI",
+    "video": "https://video.twimg.com/ext_tw_video/1886823633747894272/pu/vid/avc1/1280x720/E5Wm_rEteYmQitsr.mp4?tag=12",
+    "poster": "https://pbs.twimg.com/ext_tw_video_thumb/1886823633747894272/pu/img/8AgL5Ls5dNjHW6_t.jpg",
+    "durationSeconds": 51,
+    "source": {
+      "url": "https://x.com/DrJimFan/status/1886824152272920642",
+      "handle": "DrJimFan",
+      "publishedAt": "2025-02-04T17:08:28.000Z"
+    }
+  },
+  {
+    "id": "x-2051700526002176027",
+    "creator": "Solana",
+    "caption": "An official Solana Foundation product announcement with Google Cloud.",
+    "tag": "Solana",
+    "video": "https://video.twimg.com/amplify_video/2051700279641354244/vid/avc1/1280x720/edTUJXcZ7eihRmkZ.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/2051700279641354244/img/vltwC1gZS3b-HRQR.jpg",
+    "durationSeconds": 60,
+    "source": {
+      "url": "https://x.com/solana/status/2051700526002176027",
+      "handle": "solana",
+      "publishedAt": "2026-05-05T16:28:18.000Z"
+    }
+  },
+  {
+    "id": "x-1999757861610750407",
+    "creator": "Seeker | Solana Mobile",
+    "caption": "Solana Mobile announces a hardware kit with MediaTek, FxTec, and Trustonic.",
+    "tag": "SKR",
+    "video": "https://video.twimg.com/amplify_video/1999757780367069185/vid/avc1/720x720/uC1lG0MRDXT-C0YD.mp4",
+    "poster": "https://pbs.twimg.com/amplify_video_thumb/1999757780367069185/img/IH9vUuRFYCzDWv_U.jpg",
+    "durationSeconds": 15,
+    "source": {
+      "url": "https://x.com/solanamobile/status/1999757861610750407",
+      "handle": "solanamobile",
+      "publishedAt": "2025-12-13T08:26:42.000Z"
+    }
+  },
+  {
+    "id": "x-1758351203292111288",
+    "creator": "Jim Fan",
+    "caption": "Jim Fan shares a generated Minecraft-style scene, not footage of a working game.",
+    "tag": "AI",
+    "video": "https://video.twimg.com/ext_tw_video/1758350271040901120/pu/vid/avc1/1280x720/zXngNKU0kecSQODf.mp4?tag=12",
+    "poster": "https://pbs.twimg.com/ext_tw_video_thumb/1758350271040901120/pu/img/kYF0oNq78iF4leRn.jpg",
+    "durationSeconds": 20,
+    "source": {
+      "url": "https://x.com/DrJimFan/status/1758351203292111288",
+      "handle": "DrJimFan",
+      "publishedAt": "2024-02-16T04:42:50.000Z"
+    }
+  }
+]

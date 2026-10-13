@@ -1,30 +1,30 @@
-# Curated preview videos
+# Curated portrait videos
 
-The preview catalog includes 18 public videos: six Solana, six SKR and six AI posts. They appear in alternating topics ahead of the 50 bundled sample clips. All 68 videos now have finalized mock-SKR devnet markets, preserving the original 30 registrations. The curated videos use real Clout-operated demo markets; their source publishers are not represented as market owners or endorsers. Imported social counts are not invented. Likes and follows are local preview preferences.
+The active preview catalog contains **12 reviewed portrait videos**: three Seeker/SKR, two Solana and seven AI posts, ahead of the 50 bundled licensed sample clips. The former 18 landscape/square curated posts are archived from the public feed. Their original IDs, media attribution and existing market bindings are preserved; replacement videos receive new source-based IDs and separate devnet markets.
 
-Videos stream from the original X media CDN; they are not bundled or rehosted. Every video and poster returned HTTP 200 during the October 13, 2026 source check. Network access is required; removed media can be retried or opened via its original-post link. Original aspect ratios are contained within the Seeker 40:89 frame. A visible date distinguishes historical announcements. The comment action opens the original conversation.
+The selection favors close-up unboxings, captioned creator demonstrations, event footage and short visual stories. AI-generated scenes and presenters are identified in the editorial captions. Source publishers are not represented as owners or endorsers of Clout-operated demo markets. Social engagement is not invented; any demo trading is labeled and comes from recorded devnet transactions.
 
-| Topic  | Publisher              | Video                                        | Published  | Source                                                                 |
-| ------ | ---------------------- | -------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
-| Solana | Solana                 | Anatoly on Solana’s early growth             | 2025-10-31 | [Original post](https://x.com/solana/status/1984048092786860037)       |
-| SKR    | Seeker / Solana Mobile | SKR allocation checker reveal                | 2026-01-14 | [Original post](https://x.com/solanamobile/status/2011476349597229548) |
-| AI     | Andrej Karpathy        | Karpathy’s generated 3D world                | 2026-08-02 | [Original post](https://x.com/karpathy/status/2083749667410727319)     |
-| Solana | Solana                 | Anatoly previews Alpenglow                   | 2025-11-03 | [Original post](https://x.com/solana/status/1985363167153647945)       |
-| SKR    | Seeker / Solana Mobile | SKR launches                                 | 2026-01-21 | [Original post](https://x.com/solanamobile/status/2013794341614166152) |
-| AI     | Andrew Ng              | Andrew Ng introduces OpenWorker              | 2026-07-23 | [Original post](https://x.com/AndrewYNg/status/2080333504446108104)    |
-| Solana | Solana                 | Mert on the Solana developer community       | 2023-10-13 | [Original post](https://x.com/solana/status/1712853175898878273)       |
-| SKR    | Seeker / Solana Mobile | MONOLITH mobile hackathon                    | 2026-02-02 | [Original post](https://x.com/solanamobile/status/2018381131914084654) |
-| AI     | Andrew Ng              | Andrew Ng introduces Agentic AI              | 2025-10-07 | [Original post](https://x.com/AndrewYNg/status/1975614372799283423)    |
-| Solana | mert                   | Mert introduces the Helius Startup Launchpad | 2024-12-30 | [Original post](https://x.com/mert/status/1873788725312049528)         |
-| SKR    | Seeker / Solana Mobile | Meet Solana Seeker                           | 2024-09-19 | [Original post](https://x.com/solanamobile/status/1836614409613119632) |
-| AI     | Jim Fan                | Jim Fan introduces DreamGen                  | 2025-05-20 | [Original post](https://x.com/DrJimFan/status/1924819887139987855)     |
-| Solana | Solana                 | Kevin Bowers announces Frankendancer         | 2024-09-20 | [Original post](https://x.com/solana/status/1837035324587028567)       |
-| SKR    | Seeker / Solana Mobile | The SKR countdown                            | 2025-12-03 | [Original post](https://x.com/solanamobile/status/1996278509967434017) |
-| AI     | Jim Fan                | Robots learn athletic motion                 | 2025-02-04 | [Original post](https://x.com/DrJimFan/status/1886824152272920642)     |
-| Solana | Solana                 | Solana and Google Cloud announcement         | 2026-05-05 | [Original post](https://x.com/solana/status/2051700526002176027)       |
-| SKR    | Seeker / Solana Mobile | Solana Mobile expands its hardware reach     | 2025-12-13 | [Original post](https://x.com/solanamobile/status/1999757861610750407) |
-| AI     | Jim Fan                | Sora imagines Minecraft                      | 2024-02-16 | [Original post](https://x.com/DrJimFan/status/1758351203292111288)     |
+All 12 selected MP4 renditions were downloaded for review on October 13, 2026 and measured with ffprobe. Every one is native **9:16**, at least **720×1280**, H.264 with AAC audio, and under 57 seconds. Contact sheets sampled the footage across each clip; portrait containers with embedded landscape videos, dense prompt panels or blurred padding were rejected. The Seeker 40:89 display uses a centered cover crop; important subjects stay near the middle. Original media files are not altered.
 
-Catalog: `apps/mobile/src/lib/curated-content.json`. Source metadata was verified through X's public syndication endpoint. Editorial captions summarize each post. Public availability does not establish a redistribution license; production distribution should use the creators' permitted integration or authorization.
+| Topic  | Publisher      | Stream size | Duration | Published  | Source                                                                    |
+| ------ | -------------- | ----------- | -------- | ---------- | ------------------------------------------------------------------------- |
+| SKR    | Airforcetuan   | 1080×1920   | 56.3s    | 2025-11-19 | [Original post](https://x.com/airforcetuanNFT/status/1991160618393506023) |
+| AI     | Kling AI       | 720×1280    | 13.1s    | 2026-09-11 | [Original post](https://x.com/Kling_ai/status/2098379694240338135)        |
+| AI     | Pika           | 720×1280    | 15.1s    | 2026-05-01 | [Original post](https://x.com/pika_labs/status/2050294298487529676)       |
+| AI     | Alexis Ohanian | 720×1280    | 32.7s    | 2025-11-17 | [Original post](https://x.com/alexisohanian/status/1990540514832363659)   |
+| AI     | Kling AI       | 720×1280    | 49.7s    | 2026-07-01 | [Original post](https://x.com/Kling_ai/status/2072350860005523456)        |
+| AI     | Kling AI       | 720×1280    | 30.3s    | 2026-08-08 | [Original post](https://x.com/Kling_ai/status/2086105153409626451)        |
+| AI     | Pika           | 720×1280    | 15.1s    | 2026-05-02 | [Original post](https://x.com/pika_labs/status/2050392913226633576)       |
+| AI     | Kling AI       | 720×1280    | 19.8s    | 2026-06-13 | [Original post](https://x.com/Kling_ai/status/2065811435892924604)        |
+| Solana | Solflare       | 720×1280    | 17.8s    | 2026-08-27 | [Original post](https://x.com/solflare/status/2092953519162794455)        |
+| SKR    | vana           | 720×1280    | 35.2s    | 2026-09-01 | [Original post](https://x.com/coinempress/status/2094722038090871169)     |
+| SKR    | Oshzone        | 720×1280    | 18.1s    | 2025-12-30 | [Original post](https://x.com/OshzoneW/status/2005940485718958128)        |
+| Solana | SolanaFloor    | 720×1280    | 47.6s    | 2026-10-06 | [Original post](https://x.com/SolanaFloor/status/2107505136323219524)     |
 
-The web HTML template sets `Referrer-Policy` through a `no-referrer` meta tag before media loads. The source CDN rejected browser media requests carrying a localhost referrer; the policy also avoids exposing app navigation URLs to external media hosts. Browser verification checks actual playback rather than relying only on successful HEAD or metadata requests.
+Catalog: `apps/mobile/src/lib/curated-content.json`. The numeric `width`, `height` and `durationSeconds` fields describe the selected MP4 rendition, rather than the publisher's potentially larger original upload. Source metadata comes from X's public syndication response. Each post retains its original publisher handle, URL and publication date.
+
+Videos stream from the original X media CDN; they are not bundled or rehosted. Network access is required, and removed media can be retried or opened through the original-post link. The visible date distinguishes historical announcements. The comment action opens the original conversation. The 50 bundled licensed samples remain available as offline content.
+
+The web HTML template includes a `no-referrer` policy before media loads: the source CDN rejects requests carrying a localhost referrer. This also avoids exposing app navigation URLs to external media hosts. Browser verification checks actual playback, not only successful metadata requests.
+
+Review evidence is kept locally under ignored `artifacts/portrait-review/`: original metadata JSON, exact downloaded renditions, ffprobe JSON and contact sheets. Public availability does not establish a redistribution license; production distribution should use the creators' permitted integration or authorization.

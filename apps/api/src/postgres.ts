@@ -83,9 +83,11 @@ export class PostgresRepository implements Repository {
     await this
       .sql`update public.profiles set data = ${this.sql.json(profile as unknown as postgres.JSONValue)} where wallet = ${profile.wallet}`
   }
-  async listPosts(): Promise<Post[]> {
+  async listPosts(options?: { includeHidden?: boolean }): Promise<Post[]> {
     return (
-      await this.sql`select data from public.posts where status = 'ready' order by created_at desc limit 100`
+      await this.sql`select data from public.posts where status = 'ready' and
+        (${options?.includeHidden === true} or data->'feedHidden' is distinct from 'true'::jsonb)
+        order by created_at desc limit 100`
     ).map((row) => row.data)
   }
   async getPostSummaries(postIds: string[], wallet = ''): Promise<Record<string, PostSummary>> {

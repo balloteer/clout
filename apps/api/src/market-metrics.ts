@@ -1,5 +1,6 @@
 import type { MarketReference, MarketSnapshot } from '@clout/markets'
 import type { IndexedEvent, Post } from './domain.js'
+import { isDemoActivityEvent } from './demo-activity.js'
 
 const integer = (value: string) => /^(0|[1-9]\d{0,19})$/.test(value) && BigInt(value) <= 18446744073709551615n
 const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
@@ -24,11 +25,20 @@ export function investmentHistory(events: IndexedEvent[]) {
     .slice(-100)
   let buys = 0n
   let sells = 0n
-  const points = ordered.map(({ signature, slot, kind, quoteAmount }) => {
+  const points = ordered.map((event) => {
+    const { signature, slot, kind, quoteAmount } = event
     if (kind === 'buy') buys += BigInt(quoteAmount)
     else sells += BigInt(quoteAmount)
-    return { signature, slot, kind, quoteAmount, netQuoteAmount: (buys - sells).toString() }
+    return {
+      signature,
+      slot,
+      kind,
+      quoteAmount,
+      netQuoteAmount: (buys - sells).toString(),
+      ...(isDemoActivityEvent(event) ? { demoActivity: true } : {}),
+    }
   })
+  const demo = ordered.filter(isDemoActivityEvent)
   return {
     source: 'clout-transactions' as const,
     coverage: 'latest-100-trades' as const,
@@ -37,6 +47,9 @@ export function investmentHistory(events: IndexedEvent[]) {
     buyVolume: buys.toString(),
     sellVolume: sells.toString(),
     netQuoteAmount: (buys - sells).toString(),
+    ...(demo.length
+      ? { demo: { tradeCount: demo.length, walletCount: new Set(demo.map((event) => event.wallet)).size } }
+      : {}),
   }
 }
 

@@ -1,6 +1,8 @@
 import { sampleContent } from '../../../../packages/shared/src/sample-content'
 import { sampleMarkets } from '../../../../packages/shared/src/sample-markets'
 import curatedContent from './curated-content.json'
+import archivedContent from '../../../../packages/shared/src/archived-curated-content.json'
+import type { CuratedContent } from '../../../../packages/shared/src/curated-content'
 import { interleaveMarkets } from './catalog'
 
 export type Post = {
@@ -228,7 +230,7 @@ const sampleAssets: Record<string, { poster: number; video: number }> = {
     video: require('../../assets/media/sample-050.mp4'),
   },
 }
-export const curatedPosts: Post[] = curatedContent.map((post) => ({
+const curatedPost = (post: CuratedContent, archived = false): Post => ({
   id: post.id,
   creatorWallet: sampleMarkets[post.id]?.creatorWallet,
   creator: post.creator,
@@ -238,7 +240,7 @@ export const curatedPosts: Post[] = curatedContent.map((post) => ({
   color: post.tag === 'Solana' ? '#C6FF3D' : post.tag === 'SKR' ? '#FF3D8B' : '#3DB8FF',
   poster: post.poster,
   video: post.video,
-  videoFit: 'contain',
+  videoFit: archived ? 'contain' : 'cover',
   source: post.source,
   likes: 0,
   comments: 0,
@@ -246,8 +248,13 @@ export const curatedPosts: Post[] = curatedContent.map((post) => ({
   backers: 0,
   market: !!sampleMarkets[post.id],
   sample: true,
-  duration: `${Math.floor(post.durationSeconds / 60)}:${String(post.durationSeconds % 60).padStart(2, '0')}`,
-}))
+  duration: `${Math.floor(post.durationSeconds / 60)}:${String(Math.floor(post.durationSeconds) % 60).padStart(2, '0')}`,
+})
+export const curatedPosts = curatedContent.map((post) => curatedPost(post))
+// Retired picks stay available to saved collections and existing market holders.
+export const archivedPosts = archivedContent
+  .filter((post) => !curatedContent.some((active) => active.id === post.id))
+  .map((post) => curatedPost(post, true))
 const bundledPosts: Post[] = sampleContent.map((post) => {
   const market = sampleMarkets[post.id]
   const asset = sampleAssets[post.videoFile.replace('.mp4', '')]
@@ -270,7 +277,8 @@ const bundledPosts: Post[] = sampleContent.map((post) => {
   }
 })
 export const samplePosts: Post[] = interleaveMarkets([...curatedPosts, ...bundledPosts])
+export const allCatalogPosts = [...samplePosts, ...archivedPosts]
 export const sampleComments: Record<string, { id: string; name: string; text: string }[]> = {}
 export const mediaCredits =
-  '18 curated videos from public X posts about Solana, SKR and AI. Publisher attribution, original date and source link accompany each video; source playback requires internet. These creators have not endorsed Clout. ' +
+  `${curatedContent.length} portrait videos from public X posts about Solana, SKR and AI. Publisher attribution, original date and source link accompany each video; source playback requires internet. Earlier picks remain available in saved collections. These creators have not endorsed Clout. ` +
   '50 licensed sample excerpts from Big Buck Bunny (© 2008 Blender Foundation / www.bigbuckbunny.org) and Sintel (© 2010 Blender Foundation / www.sintel.org), CC BY 3.0; and Caminandes: Gran Dillama (© 2013 Blender Foundation / Blender Studio; director Pablo Vazquez), CC BY 4.0. Clips shortened, cropped and resized; posters extracted from the clips. Sample labels are editorial, not creator wallets or registered .skr names. No social counts are invented. Full credits and source intervals: assets/media/CREDITS.md.'

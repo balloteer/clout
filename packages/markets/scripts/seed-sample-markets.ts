@@ -11,7 +11,7 @@ import {
   type MarketSnapshot,
 } from '../src/index.js'
 import { sampleContent } from '../../shared/src/sample-content.js'
-import { curatedContent } from '../../shared/src/curated-content.js'
+import { curatedContent, originalCuratedContent } from '../../shared/src/curated-content.js'
 import { sampleMarkets, sampleMarketConfig, sampleQuoteMint } from '../../shared/src/sample-markets.js'
 
 const directory = resolve('.tooling/devnet/sample-markets')
@@ -112,16 +112,20 @@ async function main() {
   const provisioned: Provisioned = JSON.parse(await readFile('.tooling/devnet/provisioned.json', 'utf8'))
   if (provisioned.token.mint !== sampleQuoteMint || provisioned.token.decimals !== 6)
     throw new Error('The existing Mock SKR mint must be preserved.')
+  const marketCuratedContent = [
+    ...originalCuratedContent,
+    ...curatedContent.filter((post) => !originalCuratedContent.some((original) => original.id === post.id)),
+  ]
   const posts = [
     ...sampleContent.map((post) => ({ id: post.id, ordinal: post.ordinal })),
-    ...(samplesOnly ? [] : curatedContent.map((post, index) => ({ id: post.id, ordinal: 51 + index }))),
+    ...(samplesOnly ? [] : marketCuratedContent.map((post, index) => ({ id: post.id, ordinal: 51 + index }))),
   ]
   if (
     sampleContent.length !== 50 ||
-    curatedContent.length !== 18 ||
+    originalCuratedContent.length !== 18 ||
     new Set(posts.map((post) => post.id)).size !== posts.length
   )
-    throw new Error('The complete 50-sample and 18-curated catalog is required.')
+    throw new Error('The original 50-sample and 18-curated catalog must be preserved.')
   for (const post of posts) {
     const response = await fetch(`${origin}/metadata/${post.id}.json`)
     if (!response.ok || !response.headers.get('content-type')?.includes('json'))
@@ -173,8 +177,6 @@ async function main() {
     dbcConfigAddress: config.configAddress,
   })
   for (const post of posts) {
-    // Keep public devnet traffic sequential, including read-only account verification.
-    await new Promise((resolve) => setTimeout(resolve, 1500))
     let launch = await load<BuiltLaunch>(`${post.id}.launch.json`)
     const published = sampleMarkets[post.id]
     if (
@@ -186,6 +188,22 @@ async function main() {
       throw new Error(`Existing market journal mismatch for ${post.id}; never replace a published pool.`)
     if (published && (await load<Journal>(`${post.id}.signed.json`))?.signature !== published.signature)
       throw new Error(`Existing market signature mismatch for ${post.id}; no transaction sent.`)
+    // An extension retains previously finalized, verified bindings without sweeping every old pool again.
+    const prior = verified[post.id]
+    if (mode === 'run' && published && prior) {
+      if (
+        prior.baseMint !== published.baseMint ||
+        prior.dbcPool !== published.dbcPool ||
+        prior.signature !== published.signature ||
+        prior.creator !== provisioned.wallets.creator ||
+        prior.quoteMint !== provisioned.token.mint ||
+        prior.config !== config.configAddress
+      )
+        throw new Error(`Prior verified binding mismatch for ${post.id}.`)
+      continue
+    }
+    // New launches and explicit verification remain paced and sequential.
+    await new Promise((resolve) => setTimeout(resolve, 1500))
     let signature: string
     if (mode === 'run') {
       const creator = await key('creator')

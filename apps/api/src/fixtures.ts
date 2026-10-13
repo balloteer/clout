@@ -1,6 +1,10 @@
 import { sampleContent, sampleFilms, sampleMediaPath } from '../../../packages/shared/src/sample-content.js'
 import { sampleMarkets } from '../../../packages/shared/src/sample-markets.js'
-import { curatedContent } from '../../../packages/shared/src/curated-content.js'
+import {
+  allCuratedContent,
+  curatedContent,
+  originalCuratedContent,
+} from '../../../packages/shared/src/curated-content.js'
 import type { Post, Profile } from './domain.js'
 
 // Editorial labels are not wallet identities or registered .skr domains.
@@ -51,7 +55,7 @@ const bundledPosts: Post[] = sampleContent.map((post, index) => ({
   demo: true,
 }))
 
-const curatedPosts: Post[] = curatedContent.map((post, index) => ({
+const curatedPosts: Post[] = allCuratedContent.map((post, index) => ({
   id: post.id,
   creatorWallet: sampleMarkets[post.id]?.creatorWallet ?? 'demo-clout-curation',
   caption: post.caption,
@@ -63,8 +67,21 @@ const curatedPosts: Post[] = curatedContent.map((post, index) => ({
   market: sampleMarkets[post.id]
     ? { baseMint: sampleMarkets[post.id].baseMint, dbcPool: sampleMarkets[post.id].dbcPool }
     : null,
-  createdAt: new Date(Date.UTC(2026, 9, 12, 12, 1, curatedContent.length - index)).toISOString(),
+  createdAt: originalCuratedContent.some((original) => original.id === post.id)
+    ? new Date(
+        Date.UTC(
+          2026,
+          9,
+          12,
+          12,
+          1,
+          originalCuratedContent.length -
+            originalCuratedContent.findIndex((original) => original.id === post.id),
+        ),
+      ).toISOString()
+    : new Date(Date.UTC(2026, 9, 13, 12, 1, curatedContent.length - index)).toISOString(),
   demo: true,
+  ...(!curatedContent.some((active) => active.id === post.id) ? { feedHidden: true } : {}),
   source: {
     provider: 'x',
     accountHandle: post.source.handle,

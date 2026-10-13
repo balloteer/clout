@@ -4,7 +4,7 @@
 
 Native Android / Seeker app built from [PLAN.md](PLAN.md), with an Expo browser preview. SKR is the backing, tipping, and rewards currency. Clout does **not** issue a platform token; individual post tokens represent market positions. SOL pays network fees only.
 
-The preview includes 68 posts: 50 bundled samples and 18 attributed [Solana, SKR and AI videos](docs/curated-content.md). The feed snaps one post per gesture and starts with sound enabled. A browser that blocks audible autoplay shows **Tap to play with sound**; the mute control remains available. All 68 videos have finalized devnet markets using mock SKR.
+The preview includes 62 active posts: 50 bundled samples and 12 frame-reviewed, native portrait [Solana, SKR and AI videos](docs/curated-content.md). The feed snaps one post per gesture and starts with sound enabled. A browser that blocks audible autoplay shows **Tap to play with sound**; the mute control remains available. All active videos have finalized devnet markets using mock SKR. The 18 earlier curated posts retain their original markets and remain accessible through saved collections and existing positions.
 
 ## Run locally
 
@@ -15,7 +15,7 @@ npm run api
 npm run web
 ```
 
-Open http://localhost:8081. The default preview runs without accounts or cloud credentials and includes 50 distinct, bundled, credited portrait film excerpts. All 50 bundled clips and 18 curated videos have finalized mock-SKR markets on Solana devnet. Sample creator labels identify licensed footage; social counts and payouts are not fabricated. Likes, saved posts, and followed sample creators persist on the device.
+Open http://localhost:8081. The default preview runs without accounts or cloud credentials and includes 50 distinct, bundled, credited portrait film excerpts. All 50 bundled clips and 12 active curated videos have finalized mock-SKR markets on Solana devnet. Sample creator labels identify licensed footage; social counts and payouts are not fabricated. Likes, saved posts, and followed sample creators persist on the device.
 
 To connect the app to the API, copy `apps/mobile/.env.example` to `apps/mobile/.env.local`, then restart Metro. The API defaults to a local, in-memory demo repository; restarting it clears server-side demo mutations. Sign-in uses only the Seeker built-in wallet: pinned Mobile Wallet Adapter on native Android, or Seeker Connect in its Android browser. Desktop remains a read-only preview; Expo Go cannot run the native wallet integration. See [wallet setup](docs/seeker-wallet.md).
 
@@ -37,7 +37,7 @@ For a reproducible isolated Android toolchain, APK builds, and emulator setup, s
 - A daily mock-SKR faucet: 1,000 SKR per wallet per UTC day, resetting at 00:00 UTC, with verified devnet mint authority, atomic database reservations, durable signed recovery and finalized receipts. It stays disabled until persistent storage is configured. SGT-based rewards are unavailable in this devnet-only alpha.
 - Profile linking for up to three combined external accounts, with secure X authorization, pause/resume/disconnect and automatic owned-video imports. X/Cloudflare credentials are required; Fomo remains unavailable until its exact service and API are identified.
 - Small Early alpha · Devnet notices throughout the phone and desktop navigation.
-- The eye opens [Video investments](docs/investments.md): current Mock SKR in the market, a recorded backing graph above buy/sell controls, and explicit empty, unavailable and stale states. Current pool reserves and net flow across the latest 100 Clout trades are labeled separately; neither is a fabricated return or the viewer's personal balance.
+- The eye opens [Video investments](docs/investments.md): current Mock SKR in the market, a recorded backing graph above buy/sell controls, and explicit empty, unavailable and stale states. Current pool reserves and net flow across the latest 100 Clout trades are labeled separately; neither is a fabricated return or the viewer's personal balance. Operator-seeded real devnet trades are explicitly labeled **Seeded demo activity**, including verified trade and wallet counts.
 
 The two integration guides describe the API and chain configuration: [backend](docs/backend.md), [markets](docs/markets.md).
 
@@ -63,7 +63,7 @@ The browser check covers desktop, 400×890 Seeker proportions, and short phone l
 
 ## Delivery gates
 
-See [docs/acceptance.md](docs/acceptance.md) for verified checks and remaining release work. Separate live devnet rehearsals finalized buys, sells, graduation to DAMM v2, creator fee claims and a mock-SKR tip using isolated task wallets. Hosted API/Cloudflare configuration, provider credentials, app-to-API recovery testing and physical trade testing remain prerequisites for the planned release. Supabase project `qsboauxywnuhitlpmojw` is connected: all three migrations are verified, 68 posts with 68 markets are seeded, and the local API has trading and the daily faucet enabled. The app preserves each curated video’s source attribution and original proportions. Profile shows the live SKR balance above its stats. The owner confirmed physical Seeker login and a 1,000 mock SKR mint. Credentials stay in ignored local environment files. Provider imports remain disabled until their services are configured. See [devnet setup](docs/devnet-alpha.md).
+See [docs/acceptance.md](docs/acceptance.md) for verified checks and remaining release work. Separate live devnet rehearsals finalized buys, sells, graduation to DAMM v2, creator fee claims and a mock-SKR tip using isolated task wallets. Hosted API/Cloudflare configuration, provider credentials, app-to-API recovery testing and physical trade testing remain prerequisites for the planned release. Supabase project `qsboauxywnuhitlpmojw` is connected: all three migrations are verified, 80 posts with 80 distinct markets are stored, with 62 visible in the active feed, and the local API has trading and the daily faucet enabled. The app preserves source attribution and uses reviewed portrait footage to fill the Seeker frame. Profile shows the live SKR balance above its stats. The owner confirmed physical Seeker login and a 1,000 mock SKR mint. Credentials stay in ignored local environment files. Provider imports remain disabled until their services are configured. See [devnet setup](docs/devnet-alpha.md).
 
 The upstream native and Meteora dependencies currently contain npm audit advisories. Do not force incompatible SDK downgrades to silence the report. Recheck and resolve or explicitly assess those advisories before release; this branch is not represented as production-ready.
 

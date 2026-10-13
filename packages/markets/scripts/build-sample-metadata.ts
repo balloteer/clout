@@ -2,7 +2,11 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { sampleContent } from '../../shared/src/sample-content.js'
-import { curatedContent } from '../../shared/src/curated-content.js'
+import { curatedContent, originalCuratedContent } from '../../shared/src/curated-content.js'
+const metadataCuratedContent = [
+  ...originalCuratedContent,
+  ...curatedContent.filter((post) => !originalCuratedContent.some((original) => original.id === post.id)),
+]
 const output = resolve('artifacts/devnet-catalog')
 const origin = process.env.CLOUT_SAMPLE_METADATA_ORIGIN ?? 'https://clout-devnet-catalog.vercel.app'
 if (new URL(origin).protocol !== 'https:') throw new Error('Metadata origin must use HTTPS.')
@@ -49,7 +53,7 @@ for (const post of sampleContent) {
     ),
   )
 }
-for (const [index, post] of curatedContent.entries()) {
+for (const [index, post] of metadataCuratedContent.entries()) {
   const number = String(sampleContent.length + index + 1).padStart(3, '0')
   const description = `${post.caption} Source: @${post.source.handle}, ${post.source.publishedAt}. Early alpha, Solana devnet only. Clout-operated test market quoted in mock SKR; no monetary value. The source publisher does not operate or endorse this market. No ownership of the source content is represented.`
   const metadata = {
@@ -86,7 +90,7 @@ await writeFile(
   `${output}/index.html`,
   layout(
     'Clout devnet sample catalog',
-    `<p>Seek the best content, win SKR</p><p><strong>Early alpha · Devnet only.</strong> Mock SKR and post position tokens have no monetary value. This catalog publishes metadata for licensed app samples and Clout-operated demo markets on curated posts. Source publishers do not operate or endorse these test markets.</p><ul>${sampleContent.map((p) => `<li><a href="/posts/${p.id}.html">${escapeHtml(p.caption)}</a><br><small>${escapeHtml(p.credit)} · ${p.license}</small></li>`).join('')}${curatedContent.map((p) => `<li><a href="/posts/${p.id}.html">${escapeHtml(p.caption)}</a><br><small>Source: @${escapeHtml(p.source.handle)} · Clout demo market</small></li>`).join('')}</ul>`,
+    `<p>Seek the best content, win SKR</p><p><strong>Early alpha · Devnet only.</strong> Mock SKR and post position tokens have no monetary value. This catalog publishes metadata for licensed app samples and Clout-operated demo markets on curated posts. Source publishers do not operate or endorse these test markets.</p><ul>${sampleContent.map((p) => `<li><a href="/posts/${p.id}.html">${escapeHtml(p.caption)}</a><br><small>${escapeHtml(p.credit)} · ${p.license}</small></li>`).join('')}${metadataCuratedContent.map((p) => `<li><a href="/posts/${p.id}.html">${escapeHtml(p.caption)}</a><br><small>Source: @${escapeHtml(p.source.handle)} · Clout demo market</small></li>`).join('')}</ul>`,
   ),
 )
 await writeFile(
@@ -108,4 +112,6 @@ await writeFile(
     2,
   ) + '\n',
 )
-console.log(`Prepared ${sampleContent.length + curatedContent.length} devnet metadata records in ${output}.`)
+console.log(
+  `Prepared ${sampleContent.length + metadataCuratedContent.length} devnet metadata records in ${output}.`,
+)

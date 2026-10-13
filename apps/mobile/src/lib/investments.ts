@@ -8,6 +8,7 @@ export type InvestmentPoint = {
   netQuoteAmount: string
 }
 export type InvestmentActivity = {
+  demoActivity?: boolean
   pool: {
     available: boolean
     amount: string | null
@@ -28,6 +29,7 @@ export type InvestmentActivity = {
     buyVolume: string
     sellVolume: string
     netQuoteAmount: string
+    demo?: { tradeCount: number; walletCount: number }
   }
   quoteDecimals: number
 }

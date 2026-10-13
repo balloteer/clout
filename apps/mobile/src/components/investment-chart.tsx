@@ -40,6 +40,13 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
   }, [postId, revision, attempt])
   const pool = activity?.pool
   const history = activity?.investmentHistory
+  const demo = history?.demo
+  const hasDemoActivity =
+    activity?.demoActivity &&
+    Number.isSafeInteger(demo?.tradeCount) &&
+    Number.isSafeInteger(demo?.walletCount) &&
+    demo!.tradeCount > 0 &&
+    demo!.walletCount > 0
   const decimals = activity?.quoteDecimals
   const validDecimals = Number.isInteger(decimals) && decimals! >= 0 && decimals! <= 9
   const graph = history && validDecimals ? investmentCoordinates(history.points) : null
@@ -97,7 +104,9 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
       </Txt>
       <View style={s.chartHeader}>
         <Txt style={s.label}>Recorded backing</Txt>
-        <Txt style={s.small}>Latest 100 trades</Txt>
+        <Txt style={[s.small, hasDemoActivity && { color: c.yellow }]}>
+          {hasDemoActivity ? 'Seeded demo activity' : 'Latest 100 trades'}
+        </Txt>
       </View>
       <View style={s.chart} testID="investment-chart">
         <Svg width="100%" height={108} viewBox="0 0 300 106">
@@ -137,7 +146,11 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
           </Txt>
         </View>
       )}
-      <Txt style={s.small}>Clout buys minus sells, in trade order. This window starts at zero.</Txt>
+      <Txt style={s.small}>
+        {hasDemoActivity
+          ? `${demo!.tradeCount} demo trades · ${demo!.walletCount} demo wallets. Latest 100 Clout buys minus sells; window starts at zero.`
+          : 'Clout buys minus sells, in trade order. This window starts at zero.'}
+      </Txt>
       {!!error && (
         <Txt accessibilityRole="alert" style={s.error}>
           {activity ? 'Showing previously loaded investments. Refresh to try again.' : error}

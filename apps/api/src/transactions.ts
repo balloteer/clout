@@ -1,6 +1,7 @@
 import type { Connection } from '@solana/web3.js'
 import type { BuiltLaunch, BuiltTrade, MarketService, TransactionEnvelope } from '@clout/markets'
 import type { Repository, TransactionIntent } from './domain.js'
+import { isDemoTrade } from './demo-activity.js'
 
 export async function reconcileIntent(
   repository: Repository,
@@ -36,6 +37,7 @@ export async function reconcileIntent(
             baseAmount: (base < 0n ? -base : base).toString(),
             quoteAmount: (quote < 0n ? -quote : quote).toString(),
             finality: 'confirmed',
+            ...(isDemoTrade(intent) ? { demoActivity: true } : {}),
           },
         ],
         { source: 'wallet-intents', signature, slot: result.slot },

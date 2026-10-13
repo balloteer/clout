@@ -1,4 +1,4 @@
-import { samplePosts, type Post } from './data'
+import { allCatalogPosts, type Post } from './data'
 export type ApiProfile = { wallet: string; handle: string; displayName: string; seekerVerified: boolean }
 export type ApiPost = {
   id: string
@@ -23,7 +23,7 @@ export type ApiPost = {
 }
 export function mapPost(post: ApiPost, index = 0): Post {
   // Licensed bundled content stays available when a verified devnet market is attached.
-  const bundled = samplePosts.find((sample) => sample.id === post.id)
+  const bundled = allCatalogPosts.find((sample) => sample.id === post.id)
   return {
     id: post.id,
     creatorWallet: post.creatorWallet,

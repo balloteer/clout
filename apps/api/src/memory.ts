@@ -79,9 +79,9 @@ export class MemoryRepository implements Repository {
   async saveProfile(profile: Profile) {
     this.profiles.set(profile.wallet, profile)
   }
-  async listPosts() {
+  async listPosts(options?: { includeHidden?: boolean }) {
     return [...this.posts.values()]
-      .filter((post) => post.status === 'ready')
+      .filter((post) => post.status === 'ready' && (options?.includeHidden || post.feedHidden !== true))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 100)
   }
