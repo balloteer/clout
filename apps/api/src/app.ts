@@ -26,6 +26,7 @@ import { publicClaim, type RewardService } from './rewards.js'
 import { linkedUnavailable, type LinkedAccountService } from './linked-accounts.js'
 import { unavailableFaucet, type FaucetService } from './faucet.js'
 import { handleSampleMedia } from './sample-media.js'
+import { investmentHistory, MarketMetrics } from './market-metrics.js'
 
 export interface AppOptions {
   repository: Repository
@@ -83,6 +84,11 @@ export function createApp(options: AppOptions) {
   const { repository } = options
   const auth = new AuthService(repository, options.origin)
   const limiter = new RateLimiter()
+  const metrics = new MarketMetrics({
+    inspect: options.markets?.inspectMarket,
+    quoteMint: options.quoteMint,
+    decimals: options.quoteDecimals ?? 6,
+  })
   const marketService = () => {
     if (!options.markets)
       throw new ApiError(503, 'MARKETS_UNAVAILABLE', 'Test SKR markets are not configured yet.')
@@ -585,21 +591,22 @@ export function createApp(options: AppOptions) {
       const activityMatch = route.match(/^\/v1\/posts\/([^/]+)\/activity$/)
       if (method === 'GET' && activityMatch) {
         const post = await requirePost(activityMatch[1])
-        const events = (await repository.getPostEvents(post.id)).map(
-          ({ signature, slot, kind, baseAmount, quoteAmount, finality }) => ({
-            signature,
-            slot,
-            kind,
-            baseAmount,
-            quoteAmount,
-            finality,
-          }),
-        )
+        const [recorded, pool] = await Promise.all([repository.getPostEvents(post.id), metrics.read(post)])
+        const events = recorded.map(({ signature, slot, kind, baseAmount, quoteAmount, finality }) => ({
+          signature,
+          slot,
+          kind,
+          baseAmount,
+          quoteAmount,
+          finality,
+        }))
         send(200, {
           events,
           baseDecimals: 6,
           quoteDecimals: options.quoteDecimals ?? 6,
           source: 'clout-transactions',
+          pool,
+          investmentHistory: investmentHistory(recorded),
         })
         return
       }
@@ -754,6 +761,7 @@ export function createApp(options: AppOptions) {
         if (intent.signature && intent.signature !== signature)
           throw new ApiError(409, 'SIGNATURE_MISMATCH', 'This request already tracks another signature.')
         const result = await reconcileIntent(repository, marketService(), intent, signature, options.chain)
+        if (result.status === 'confirmed') metrics.invalidate(intent.postId)
         send(200, result)
         return
       }

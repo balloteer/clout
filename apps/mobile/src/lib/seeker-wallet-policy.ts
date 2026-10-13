@@ -5,7 +5,10 @@ import { isAddress } from '@solana/kit'
 // https://github.com/solana-mobile/seeker-connect/blob/main/js/examples/example-web/src/config.ts
 export const SEEKER_WALLET_URI = 'https://connect.solanamobile.com'
 export const SEEKER_CHAIN = 'solana:devnet' as const
-export const SEEKER_STORAGE_KEY = 'clout-seeker-wallet-v1'
+export const SEEKER_STORAGE_KEY = 'clout-seeker-wallet-v2'
+// This marker is assigned only after the native package/certificate gate runs.
+// It is not a URI and must never be used as an association target.
+export const SEEKER_NATIVE_SOURCE = 'android-package:seeker-certified'
 
 export type SeekerAuthorization = {
   address: string
@@ -32,10 +35,17 @@ export function assertSeekerWalletUri(value: unknown): asserts value is string {
     throw new Error('Only the Seeker built-in wallet can connect to Clout.')
 }
 
-export function validateSeekerAuthorization(value: unknown, expectedAddress?: string): SeekerAuthorization {
+export function validateSeekerAuthorization(
+  value: unknown,
+  expectedAddress?: string,
+  source: 'native' | 'web' = 'web',
+): SeekerAuthorization {
   if (!value || typeof value !== 'object') throw new Error('Invalid Seeker wallet authorization.')
   const candidate = value as Partial<SeekerAuthorization>
-  assertSeekerWalletUri(candidate.walletUriBase)
+  if (source === 'native') {
+    if (candidate.walletUriBase !== SEEKER_NATIVE_SOURCE)
+      throw new Error('Only the Seeker built-in wallet can connect to Clout.')
+  } else assertSeekerWalletUri(candidate.walletUriBase)
   if (
     typeof candidate.address !== 'string' ||
     !isAddress(candidate.address) ||
@@ -47,7 +57,17 @@ export function validateSeekerAuthorization(value: unknown, expectedAddress?: st
   if (expectedAddress && candidate.address !== expectedAddress) {
     throw new Error('The wallet account changed. Disconnect and reconnect before continuing.')
   }
-  return { address: candidate.address, authToken: candidate.authToken, walletUriBase: SEEKER_WALLET_URI }
+  return {
+    address: candidate.address,
+    authToken: candidate.authToken,
+    walletUriBase: source === 'native' ? SEEKER_NATIVE_SOURCE : SEEKER_WALLET_URI,
+  }
+}
+
+export function isWalletAuthorizationFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const value = error as { code?: unknown; userInfo?: { jsonRpcErrorCode?: unknown } }
+  return value.code === -1 || (value.code === 'JSON_RPC_ERROR' && value.userInfo?.jsonRpcErrorCode === -1)
 }
 
 export function signedMessageParts(payload: Uint8Array, expected: Uint8Array) {

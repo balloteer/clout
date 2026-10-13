@@ -17,6 +17,7 @@ import { colors as c, SLOGAN } from '../lib/theme'
 import { useApp } from '../lib/store'
 import { useWallet } from '../lib/wallet'
 import type { Post } from '../lib/data'
+import type { FeedFilter } from '../lib/catalog'
 import { Avatar, Button, Icon, Txt, type IconName } from '../components/ui'
 import { CommentsSheet, ConnectSheet, MarketSheet, Sheet } from '../components/sheets'
 import { Feed } from '../screens/feed'
@@ -60,7 +61,7 @@ export default function App() {
   const [market, setMarket] = useState<Post | null>(null)
   const [discovery, setDiscovery] = useState<Post>()
   const [feedPostId, setFeedPostId] = useState<string>()
-  const [feedFilter, setFeedFilter] = useState<'for-you' | 'following'>('for-you')
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('for-you')
   function watchPost(post: Post) {
     setDiscovery(post)
     setFeedPostId(post.id)

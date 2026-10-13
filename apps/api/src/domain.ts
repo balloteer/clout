@@ -29,7 +29,13 @@ export interface Post {
   demo: boolean
   tags: string[]
   market: { baseMint: string; dbcPool: string } | null
-  source?: { provider: 'x' | 'fomo'; accountHandle: string; postId: string; url: string }
+  source?: {
+    provider: 'x' | 'fomo'
+    accountHandle: string
+    postId: string
+    url: string
+    publishedAt?: string
+  }
 }
 export interface Comment {
   id: string

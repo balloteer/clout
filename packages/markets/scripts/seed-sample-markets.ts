@@ -1,7 +1,7 @@
-/** Creates exactly 30 real devnet DBC markets from the licensed catalog, with durable signed journals. */
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+/** Extends the devnet catalog without replacing existing pools, with durable signed journals. */
+import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { Connection, Keypair, SystemProgram, Transaction } from '@solana/web3.js'
+import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js'
 import bs58 from 'bs58'
 import {
   createMarketService,
@@ -11,10 +11,15 @@ import {
   type MarketSnapshot,
 } from '../src/index.js'
 import { sampleContent } from '../../shared/src/sample-content.js'
+import { curatedContent } from '../../shared/src/curated-content.js'
+import { sampleMarkets, sampleMarketConfig, sampleQuoteMint } from '../../shared/src/sample-markets.js'
 
 const directory = resolve('.tooling/devnet/sample-markets')
 const mode = process.argv[2] ?? 'prepare'
 if (!['prepare', 'run', 'verify'].includes(mode)) throw new Error('Use prepare, run or verify.')
+const samplesOnly = process.argv.includes('--samples-only')
+if (process.argv.slice(3).some((argument) => argument !== '--samples-only'))
+  throw new Error('The only optional flag is --samples-only.')
 const rpcUrl = process.env.CLOUT_BOOTSTRAP_DEVNET_RPC_URL ?? 'https://api.devnet.solana.com'
 const origin = process.env.CLOUT_SAMPLE_METADATA_ORIGIN ?? 'https://clout-devnet-catalog.vercel.app'
 if (new URL(rpcUrl).protocol !== 'https:' || new URL(origin).protocol !== 'https:')
@@ -34,8 +39,20 @@ async function load<T>(file: string): Promise<T | null> {
 }
 async function save(file: string, value: unknown) {
   const path = resolve(directory, file)
-  await writeFile(`${path}.tmp`, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 })
+  const handle = await open(`${path}.tmp`, 'w', 0o600)
+  try {
+    await handle.writeFile(JSON.stringify(value, null, 2) + '\n')
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
   await rename(`${path}.tmp`, path)
+  const folder = await open(directory, 'r')
+  try {
+    await folder.sync()
+  } finally {
+    await folder.close()
+  }
 }
 type Journal = { signature: string; signedBase64: string; blockhash: string; lastValidBlockHeight: number }
 async function submit(
@@ -93,8 +110,18 @@ async function main() {
   await mkdir(directory, { recursive: true, mode: 0o700 })
   await guard()
   const provisioned: Provisioned = JSON.parse(await readFile('.tooling/devnet/provisioned.json', 'utf8'))
-  const posts = sampleContent.slice(0, 30)
-  if (posts.length !== 30) throw new Error('Exactly 30 distinct sample entries required.')
+  if (provisioned.token.mint !== sampleQuoteMint || provisioned.token.decimals !== 6)
+    throw new Error('The existing Mock SKR mint must be preserved.')
+  const posts = [
+    ...sampleContent.map((post) => ({ id: post.id, ordinal: post.ordinal })),
+    ...(samplesOnly ? [] : curatedContent.map((post, index) => ({ id: post.id, ordinal: 51 + index }))),
+  ]
+  if (
+    sampleContent.length !== 50 ||
+    curatedContent.length !== 18 ||
+    new Set(posts.map((post) => post.id)).size !== posts.length
+  )
+    throw new Error('The complete 50-sample and 18-curated catalog is required.')
   for (const post of posts) {
     const response = await fetch(`${origin}/metadata/${post.id}.json`)
     if (!response.ok || !response.headers.get('content-type')?.includes('json'))
@@ -109,55 +136,33 @@ async function main() {
     )
       throw new Error(`Invalid metadata for ${post.id}.`)
   }
+  const verified = (await load<Record<string, Verified>>('verified.json')) ?? {}
+  const missingCount = posts.filter((post) => !verified[post.id]).length
+  const creatorLamports = await connection.getBalance(new PublicKey(provisioned.wallets.creator), 'confirmed')
+  const estimatedReserveLamports = missingCount * 22_000_000 + 20_000_000
   console.log(
     JSON.stringify({
       mode,
       network: 'devnet',
       posts: posts.length,
+      existingMarkets: posts.filter((post) => sampleMarkets[post.id]).length,
+      missingMarkets: missingCount,
+      creator: provisioned.wallets.creator,
+      creatorLamports,
+      estimatedReserveLamports,
       quoteMint: provisioned.token.mint,
       metadataOrigin: origin,
     }),
   )
   if (mode === 'prepare') return
-  const basic = createMarketService({
-    cluster: 'devnet',
-    rpcUrl,
-    quoteMint: provisioned.token.mint,
-    quoteDecimals: 6,
-  })
-  let config = await load<BuiltConfig>('config.json')
+  const config = await load<BuiltConfig>('config.json')
+  if (!config || config.configAddress !== sampleMarketConfig)
+    throw new Error('The existing shared market configuration must be preserved.')
   if (mode === 'run') {
-    const payer = await key('payer')
     const creator = await key('creator')
     if (creator.publicKey.toBase58() !== provisioned.wallets.creator) throw new Error('Creator mismatch.')
-    if (!config) {
-      config = await basic.buildConfig({
-        payer: payer.publicKey.toBase58(),
-        feeClaimer: payer.publicKey.toBase58(),
-        leftoverReceiver: payer.publicKey.toBase58(),
-        migrationThresholdTokens: 1000,
-      })
-      await save('config.json', config)
-    }
-    const configBuilt = config
-    await submit('config', async () => ({
-      transaction: Transaction.from(Buffer.from(configBuilt.transactionBase64, 'base64')),
-      blockhash: configBuilt.blockhash,
-      lastValidBlockHeight: configBuilt.lastValidBlockHeight,
-      signer: payer,
-    }))
-    // Fixed one-time devnet funding, journaled before broadcast. Never drains or reads user wallet keys.
-    await submit('creator-funding', async () => {
-      const lifetime = await connection.getLatestBlockhash('confirmed')
-      const transaction = new Transaction({ feePayer: payer.publicKey, ...lifetime }).add(
-        SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: creator.publicKey,
-          lamports: 1_500_000_000,
-        }),
-      )
-      return { transaction, ...lifetime, signer: payer }
-    })
+    if (creatorLamports < estimatedReserveLamports)
+      throw new Error('Fund the existing devnet creator wallet before extending the catalog.')
   }
   if (!config) throw new Error('Sample market configuration has not been provisioned.')
   const service = createMarketService({
@@ -167,9 +172,20 @@ async function main() {
     quoteDecimals: 6,
     dbcConfigAddress: config.configAddress,
   })
-  const verified: Record<string, Verified> = {}
   for (const post of posts) {
+    // Keep public devnet traffic sequential, including read-only account verification.
+    await new Promise((resolve) => setTimeout(resolve, 1500))
     let launch = await load<BuiltLaunch>(`${post.id}.launch.json`)
+    const published = sampleMarkets[post.id]
+    if (
+      published &&
+      (!launch ||
+        launch.market.baseMint !== published.baseMint ||
+        launch.market.dbcPool !== published.dbcPool)
+    )
+      throw new Error(`Existing market journal mismatch for ${post.id}; never replace a published pool.`)
+    if (published && (await load<Journal>(`${post.id}.signed.json`))?.signature !== published.signature)
+      throw new Error(`Existing market signature mismatch for ${post.id}; no transaction sent.`)
     let signature: string
     if (mode === 'run') {
       const creator = await key('creator')
@@ -200,6 +216,8 @@ async function main() {
         throw new Error(`Unverified launch for ${post.id}.`)
     }
     if (!launch) throw new Error(`Missing launch ${post.id}.`)
+    if (published && signature !== published.signature)
+      throw new Error(`Existing market signature mismatch for ${post.id}.`)
     const snapshot = await service.inspectMarket(launch.market)
     if (
       snapshot.creator !== provisioned.wallets.creator ||
@@ -250,7 +268,9 @@ async function main() {
     'packages/shared/src/sample-markets.ts',
     `/** Generated only after finalized devnet launches and account verification. */\nexport const sampleMarketNetwork = 'devnet' as const\nexport const sampleQuoteMint = '${provisioned.token.mint}'\nexport const sampleMarketConfig = '${config.configAddress}'\nexport const sampleMarkets: Record<string, { postId: string; baseMint: string; dbcPool: string; creatorWallet: string; signature: string }> = ${JSON.stringify(registry, null, 2)}\n`,
   )
-  console.log('Verified all 30 devnet sample markets. Public registry generated.')
+  console.log(
+    `Verified ${posts.length} requested devnet catalog markets. Public registry contains ${Object.keys(verified).length} markets.`,
+  )
 }
 main().catch((error: unknown) => {
   console.error(

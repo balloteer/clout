@@ -1,9 +1,19 @@
 import { sampleContent, sampleFilms, sampleMediaPath } from '../../../packages/shared/src/sample-content.js'
 import { sampleMarkets } from '../../../packages/shared/src/sample-markets.js'
+import { curatedContent } from '../../../packages/shared/src/curated-content.js'
 import type { Post, Profile } from './domain.js'
 
 // Editorial labels are not wallet identities or registered .skr domains.
 export const demoProfiles: Profile[] = [
+  {
+    wallet: 'demo-clout-curation',
+    handle: 'Clout curated samples',
+    displayName: 'Clout curated samples',
+    bio: 'Editorial source videos. Publishers retain attribution and have not endorsed Clout.',
+    avatar: null,
+    seekerVerified: false,
+    reputation: 0,
+  },
   ...Object.values(sampleFilms).map((film) => ({
     wallet: film.creatorWallet,
     handle: film.creator,
@@ -17,14 +27,14 @@ export const demoProfiles: Profile[] = [
     wallet,
     handle: 'Clout devnet samples',
     displayName: 'Clout devnet samples',
-    bio: 'Clout test-market operator for licensed Blender film excerpts. Devnet test tokens only; film attribution remains with each post.',
+    bio: 'Clout demo-market operator. Devnet test tokens only. Original video publishers retain attribution; their appearance does not imply ownership or endorsement of these markets.',
     avatar: null,
     seekerVerified: false,
     reputation: 0,
   })),
 ]
 
-export const demoPosts: Post[] = sampleContent.map((post, index) => ({
+const bundledPosts: Post[] = sampleContent.map((post, index) => ({
   id: post.id,
   creatorWallet: sampleMarkets[post.id]?.creatorWallet ?? post.creatorWallet,
   caption: post.caption,
@@ -40,3 +50,28 @@ export const demoPosts: Post[] = sampleContent.map((post, index) => ({
   createdAt: new Date(Date.UTC(2026, 9, 12, 12, 0, 50 - index)).toISOString(),
   demo: true,
 }))
+
+const curatedPosts: Post[] = curatedContent.map((post, index) => ({
+  id: post.id,
+  creatorWallet: sampleMarkets[post.id]?.creatorWallet ?? 'demo-clout-curation',
+  caption: post.caption,
+  tags: [post.tag.toLowerCase()],
+  videoUrl: post.video,
+  thumbnailUrl: post.poster,
+  status: 'ready',
+  streamUid: null,
+  market: sampleMarkets[post.id]
+    ? { baseMint: sampleMarkets[post.id].baseMint, dbcPool: sampleMarkets[post.id].dbcPool }
+    : null,
+  createdAt: new Date(Date.UTC(2026, 9, 12, 12, 1, curatedContent.length - index)).toISOString(),
+  demo: true,
+  source: {
+    provider: 'x',
+    accountHandle: post.source.handle,
+    postId: post.id.replace(/^x-/, ''),
+    url: post.source.url,
+    publishedAt: post.source.publishedAt,
+  },
+}))
+
+export const demoPosts: Post[] = [...curatedPosts, ...bundledPosts]

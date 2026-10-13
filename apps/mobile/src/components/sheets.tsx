@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors as c, fonts } from '../lib/theme'
 import { useWallet } from '../lib/wallet'
+import { walletConnectionError } from '../lib/wallet-errors'
 import { useApp } from '../lib/store'
 import { api, API_URL, postJson } from '../lib/api'
 import { sampleComments, imageSource, type Post } from '../lib/data'
@@ -27,7 +28,7 @@ import {
   type TransactionResult,
 } from '../lib/transactions'
 import { Avatar, Badge, Button, Icon, Txt } from './ui'
-import { ActivityChart } from './activity-chart'
+import { InvestmentChart } from './investment-chart'
 import type { ApiProfile } from '../lib/contracts'
 type Quote = {
   id: string
@@ -101,13 +102,8 @@ export function ConnectSheet({ onClose }: { onClose: () => void }) {
       await wallet.connect()
       onClose()
     } catch (err) {
-      const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined
-      if (code === 'cancelled') return
-      if (code === 'request-declined' || code === 'authorization-declined') {
-        setError('The wallet request was declined. You can try again when you’re ready.')
-        return
-      }
-      setError(err instanceof Error ? err.message : 'Wallet connection was cancelled. You can try again.')
+      const message = walletConnectionError(err, { native: wallet.native, apiUrl: API_URL })
+      if (message !== null) setError(message)
     }
   }
   return (
@@ -173,6 +169,7 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
   const [pending, setPending] = useState<PendingTransaction | null>(null)
   const [decimals, setDecimals] = useState(6)
   const [configReady, setConfigReady] = useState(false)
+  const [activityRevision, setActivityRevision] = useState(0)
   const action = useRef(false)
   useEffect(() => {
     let active = true
@@ -232,6 +229,7 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
   }
   function report(result: TransactionResult, description: string) {
     if (result.status === 'confirmed') {
+      setActivityRevision((value) => value + 1)
       setStatus(`${description} confirmed on devnet.`)
       notify(`${description} confirmed.`)
     } else if (result.status === 'failed' || result.status === 'expired') {
@@ -336,7 +334,7 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
     }
   }
   return (
-    <Sheet title="Back your taste" onClose={onClose}>
+    <Sheet title="Video investments" onClose={onClose}>
       <View style={s.post}>
         <Image source={imageSource(post.poster)} style={s.thumb} />
         <View style={{ flex: 1, gap: 5 }}>
@@ -346,23 +344,9 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
           </Txt>
         </View>
       </View>
-      <View style={s.tradeTabs}>
-        {(['buy', 'sell'] as const).map((value) => (
-          <Pressable
-            accessibilityRole="tab"
-            aria-selected={side === value}
-            disabled={busy || !!pending}
-            accessibilityState={{ selected: side === value }}
-            key={value}
-            onPress={() => changeSide(value)}
-            style={[s.tradeTab, side === value && { backgroundColor: c.cream }]}
-          >
-            <Txt style={{ color: side === value ? c.ink : c.muted, fontWeight: '700' }}>
-              {value === 'buy' ? 'Back this' : 'Sell position'}
-            </Txt>
-          </Pressable>
-        ))}
-      </View>
+      {!!post.source && post.market && (
+        <Txt style={s.marketAttribution}>Clout demo market · Independent of the source publisher.</Txt>
+      )}
       {!post.market ? (
         <View style={s.marketEmpty}>
           <Icon name="sparkles-outline" size={34} color={c.pink} />
@@ -379,7 +363,24 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
         </View>
       ) : (
         <>
-          <ActivityChart postId={post.id} />
+          <InvestmentChart postId={post.id} revision={activityRevision} />
+          <View style={s.tradeTabs}>
+            {(['buy', 'sell'] as const).map((value) => (
+              <Pressable
+                accessibilityRole="tab"
+                aria-selected={side === value}
+                disabled={busy || !!pending}
+                accessibilityState={{ selected: side === value }}
+                key={value}
+                onPress={() => changeSide(value)}
+                style={[s.tradeTab, side === value && { backgroundColor: c.cream }]}
+              >
+                <Txt style={{ color: side === value ? c.ink : c.muted, fontWeight: '700' }}>
+                  {value === 'buy' ? 'Back this' : 'Sell position'}
+                </Txt>
+              </Pressable>
+            ))}
+          </View>
           <View style={s.amount}>
             <TextInput
               accessibilityLabel={side === 'buy' ? 'SKR amount' : 'Post token amount'}
@@ -389,8 +390,8 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
               onChangeText={changeAmount}
               style={s.amountInput}
             />
-            <Txt display style={{ fontSize: 22, color: c.lime }}>
-              {side === 'buy' ? 'Test SKR' : 'Post tokens'}
+            <Txt display style={{ fontSize: 22, color: c.lime, flexShrink: 0 }}>
+              {side === 'buy' ? 'Mock SKR' : 'Post tokens'}
             </Txt>
           </View>
           <View style={s.presets}>
@@ -446,8 +447,7 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
       <View style={s.footer}>
         <Icon name="information-circle-outline" size={17} color={c.muted} />
         <Txt style={{ color: c.muted, fontSize: 11, flex: 1 }}>
-          SKR is the trading currency. This build uses separately configured test SKR on devnet. Views don’t
-          determine prices.
+          Devnet · Mock SKR. Views don’t determine prices. SOL pays network fees.
         </Txt>
       </View>
     </Sheet>
@@ -631,8 +631,9 @@ const s = StyleSheet.create({
   },
   helper: { fontSize: 13, color: c.muted, textAlign: 'center', marginVertical: 15 },
   error: { fontSize: 13, color: c.orange, marginTop: 16, lineHeight: 20 },
-  post: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 23 },
-  thumb: { width: 54, height: 65, borderRadius: 10 },
+  post: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  thumb: { width: 44, height: 52, borderRadius: 10 },
+  marketAttribution: { fontSize: 10, lineHeight: 14, color: c.muted, marginBottom: 12 },
   tradeTabs: { backgroundColor: c.surface, borderRadius: 13, padding: 4, flexDirection: 'row' },
   tradeTab: {
     flex: 1,
@@ -643,9 +644,9 @@ const s = StyleSheet.create({
     borderRadius: 10,
   },
   marketEmpty: { alignItems: 'center', paddingVertical: 30, gap: 18 },
-  amount: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 20 },
-  amountInput: { fontFamily: fonts.display, color: c.cream, fontSize: 43, flex: 1 },
-  presets: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  amount: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  amountInput: { fontFamily: fonts.display, color: c.cream, fontSize: 43, flex: 1, minWidth: 0 },
+  presets: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   preset: {
     flex: 1,
     alignItems: 'center',

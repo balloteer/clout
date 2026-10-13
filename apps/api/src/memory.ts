@@ -347,7 +347,12 @@ export class MemoryRepository implements Repository {
   async getPostEvents(postId: string) {
     return [...this.events.values()]
       .filter((event) => event.postId === postId)
-      .sort((a, b) => b.slot - a.slot)
+      .sort(
+        (a, b) =>
+          b.slot - a.slot ||
+          (a.signature < b.signature ? 1 : a.signature > b.signature ? -1 : 0) ||
+          (a.instructionPath < b.instructionPath ? 1 : a.instructionPath > b.instructionPath ? -1 : 0),
+      )
       .slice(0, 100)
       .map((event) => structuredClone(event))
   }

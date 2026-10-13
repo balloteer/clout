@@ -64,6 +64,47 @@ async function fixture(
   }
 }
 
+test('public video activity separates a live pool balance from an empty recorded history', async () => {
+  let reads = 0
+  const app = await fixture(
+    {
+      inspectMarket: async (market: { postId: string; baseMint: string; dbcPool: string }) => {
+        reads++
+        return {
+          ...market,
+          status: 'dbc',
+          pool: market.dbcPool,
+          quoteMint: 'test-skr',
+          quoteDecimals: 6,
+          quoteReserve: '7500000',
+          slot: 500,
+        }
+      },
+    } as unknown as MarketService,
+    async (repository) => {
+      repository.posts.get('big-buck-bunny')!.market = { baseMint: 'base', dbcPool: 'pool' }
+      return { quoteMint: 'test-skr', quoteDecimals: 6 }
+    },
+  )
+  try {
+    const response = await app.request('/v1/posts/big-buck-bunny/activity')
+    assert.equal(response.status, 200)
+    assert.equal(response.data.pool.available, true)
+    assert.equal(response.data.pool.amount, '7500000')
+    assert.equal(response.data.pool.label, 'SKR in curve')
+    assert.equal(response.data.pool.slot, 500)
+    assert.deepEqual(response.data.events, [])
+    assert.deepEqual(response.data.investmentHistory.points, [])
+    assert.equal(response.data.investmentHistory.netQuoteAmount, '0')
+    const retry = await app.request('/v1/posts/big-buck-bunny/activity')
+    assert.deepEqual(retry.data, response.data)
+    assert.equal(reads, 1)
+    assert.equal((await app.request('/v1/posts/sintel/activity')).data.pool.amount, null)
+  } finally {
+    await app.close()
+  }
+})
+
 test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logout', async () => {
   const app = await fixture()
   try {
@@ -426,16 +467,23 @@ test('only signed media callbacks publish posts; replay cannot regress ready sta
 
 test('trade build retries return the persisted message and enforce wallet ownership', async () => {
   let builds = 0
+  let releaseBuilds!: () => void
+  const bothBuilding = new Promise<void>((resolve) => {
+    releaseBuilds = resolve
+  })
   const markets = {
     buildTrade: async ({ owner, quoteId }: { owner: string; quoteId: string }) => {
-      builds++
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      const build = ++builds
+      // Hold the first response until both requests have read the empty intent.
+      // A timer permits a valid sequential replay (200) on a busy test runner.
+      if (build === 2) releaseBuilds()
+      await bothBuilding
       return {
         owner,
         quoteId,
-        id: `built-${builds}`,
-        messageBase64: `message-${builds}`,
-        transactionBase64: `tx-${builds}`,
+        id: `built-${build}`,
+        messageBase64: `message-${build}`,
+        transactionBase64: `tx-${build}`,
         quote: { market: { postId: 'big-buck-bunny' } },
       } as BuiltTrade
     },
@@ -455,7 +503,9 @@ test('trade build retries return the persisted message and enforce wallet owners
     ])
     assert.equal(a.status, 201)
     assert.equal(b.status, 201)
+    assert.equal(builds, 2)
     assert.equal(a.data.messageBase64, b.data.messageBase64)
+    assert.equal(a.data.transactionBase64, b.data.transactionBase64)
     const repeat = await app.request('/v1/trades/build', input)
     assert.equal(repeat.status, 200)
     assert.equal(repeat.data.messageBase64, a.data.messageBase64)
@@ -544,6 +594,10 @@ test('HTTP quote, build and confirmation bind the wallet and record actual settl
     assert.equal(activity.data.events.length, 1)
     assert.equal(activity.data.events[0].signature, signature)
     assert.equal('wallet' in activity.data.events[0], false)
+    assert.equal(activity.data.investmentHistory.points.length, 1)
+    assert.equal(activity.data.investmentHistory.netQuoteAmount, activity.data.events[0].quoteAmount)
+    assert.equal(activity.data.investmentHistory.baseline, 'window-start-zero')
+    assert.equal(activity.data.pool.amount, null)
     assert.deepEqual((await app.request('/v1/posts/sintel/activity')).data.events, [])
     assert.equal((await app.request('/v1/posts/missing/activity')).status, 404)
   } finally {

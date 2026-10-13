@@ -347,7 +347,7 @@ export class PostgresRepository implements Repository {
   async getPostEvents(postId: string): Promise<IndexedEvent[]> {
     return (
       await this
-        .sql`select data from private.indexed_events where post_id = ${postId} order by slot desc limit 100`
+        .sql`select data from private.indexed_events where post_id = ${postId} order by slot desc, signature collate "C" desc, instruction_path collate "C" desc limit 100`
     ).map((row) => row.data)
   }
   async putIntent(intent: TransactionIntent) {

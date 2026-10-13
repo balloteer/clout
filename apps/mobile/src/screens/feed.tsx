@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Image, Linking, Platform, Pressable, Share, StyleSheet, View } from 'react-native'
+import {
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useApp } from '../lib/store'
 import { imageSource, type Post } from '../lib/data'
+import { filterFeedPosts, type FeedFilter } from '../lib/catalog'
 import { colors as c } from '../lib/theme'
 import { Avatar, Icon, Txt, type IconName } from '../components/ui'
 import { FeedVideo, type PlaybackStatus } from '../components/feed-video'
@@ -17,8 +28,8 @@ type FeedProps = {
   initialPost?: Post
   activePostId?: string
   onPostChange: (id: string) => void
-  filter: 'for-you' | 'following'
-  onFilterChange: (filter: 'for-you' | 'following') => void
+  filter: FeedFilter
+  onFilterChange: (filter: FeedFilter) => void
   topInset?: number
   bottomInset?: number
   immersive?: boolean
@@ -38,17 +49,19 @@ export function Feed({
   obscured = false,
 }: FeedProps) {
   const { posts, following } = useApp()
+  const { fontScale } = useWindowDimensions()
   const feedPosts = initialPost
     ? [
         posts.find((p) => p.id === initialPost.id) ?? initialPost,
         ...posts.filter((p) => p.id !== initialPost.id),
       ]
     : posts
-  const list = filter === 'following' ? feedPosts.filter((p) => following.includes(p.creator)) : feedPosts
-  const [muted, setMuted] = useState(true)
+  const list = filterFeedPosts(feedPosts, filter, following)
+  const [muted, setMuted] = useState(false)
   const [area, setArea] = useState({ width: 0, height: 0 })
   const pager = useRef<PostPagerHandle>(null)
   const lastScrolledId = useRef(activePostId)
+  const lastScrolledIndex = useRef<number | undefined>(undefined)
   const frameWidth = Math.min(area.width, area.height * SEEKER_ASPECT, 470)
   const frameHeight = frameWidth / SEEKER_ASPECT
   const frameOffset = (area.height - frameHeight) / 2
@@ -59,16 +72,18 @@ export function Feed({
     list.findIndex((p) => p.id === activePostId),
   )
   const currentId = list[index]?.id
-  const compact = frameWidth < 320
+  const separateTabs = immersive && (frameWidth < 360 || fontScale > 1.2)
   useEffect(() => {
-    if (currentId !== lastScrolledId.current && frameHeight > 0) {
+    if (frameHeight > 0 && (currentId !== lastScrolledId.current || index !== lastScrolledIndex.current)) {
       pager.current?.scrollToOffset({ offset: index * frameHeight, animated: false })
       lastScrolledId.current = currentId
+      lastScrolledIndex.current = index
     }
   }, [currentId, index, frameHeight])
   function selectPage(offset: number) {
     const nextIndex = Math.max(0, Math.min(list.length - 1, Math.round(offset / frameHeight)))
     const id = list[nextIndex]?.id
+    if (id) lastScrolledIndex.current = nextIndex
     if (id && id !== lastScrolledId.current) {
       lastScrolledId.current = id
       onPostChange(id)
@@ -131,12 +146,14 @@ export function Feed({
             />
           ) : (
             <View style={s.noFollowing}>
-              <Icon name="people-outline" size={44} color={c.pink} />
+              <Icon name={filter === 'markets' ? 'eye-outline' : 'people-outline'} size={44} color={c.pink} />
               <Txt display style={{ fontSize: 24, lineHeight: 30, textAlign: 'center' }}>
-                Find your people.
+                {filter === 'markets' ? 'No markets yet.' : 'Find your people.'}
               </Txt>
               <Txt style={{ color: c.muted, textAlign: 'center' }}>
-                Follow a creator in Discover to see their posts here.
+                {filter === 'markets'
+                  ? 'Posts appear here after their creators launch a market.'
+                  : 'Follow a creator in Discover to see their posts here.'}
               </Txt>
             </View>
           )}
@@ -152,30 +169,35 @@ export function Feed({
           <View
             style={[
               s.tabs,
-              { top: top + 4, left: immersive ? Math.max(12, 72 - (area.width - frameWidth) / 2) : 16 },
-              compact && { gap: 8 },
+              {
+                top: top + (separateTabs ? 52 : 4),
+                left: separateTabs ? 12 : immersive ? Math.max(12, 72 - (area.width - frameWidth) / 2) : 16,
+              },
             ]}
           >
-            {(['for-you', 'following'] as const).map((item) => (
-              <Pressable
-                key={item}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: filter === item }}
-                aria-selected={filter === item}
-                onPress={() => onFilterChange(item)}
-                style={s.tab}
-              >
-                <Txt
-                  numberOfLines={1}
-                  style={[s.tabText, compact && { fontSize: 14 }, filter === item && { color: c.cream }]}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flex: 1 }}
+              contentContainerStyle={s.tabList}
+            >
+              {(['for-you', 'following', 'markets'] as const).map((item) => (
+                <Pressable
+                  key={item}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: filter === item }}
+                  aria-selected={filter === item}
+                  onPress={() => onFilterChange(item)}
+                  style={s.tab}
                 >
-                  {item === 'for-you' ? 'For you' : 'Following'}
-                </Txt>
-                {filter === item && <View style={s.tabUnderline} />}
-              </Pressable>
-            ))}
-            <View style={{ flex: 1 }} />
-            {!!list.length && (
+                  <Txt numberOfLines={1} style={[s.tabText, filter === item && { color: c.cream }]}>
+                    {item === 'for-you' ? 'For you' : item === 'following' ? 'Following' : 'Markets'}
+                  </Txt>
+                  {filter === item && <View style={s.tabUnderline} />}
+                </Pressable>
+              ))}
+            </ScrollView>
+            {!!list.length && !separateTabs && (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
@@ -186,6 +208,16 @@ export function Feed({
               </Pressable>
             )}
           </View>
+          {!!list.length && separateTabs && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
+              style={[s.sound, { position: 'absolute', top: top + 4, right: 12 }]}
+              onPress={() => setMuted((m) => !m)}
+            >
+              <Icon name={muted ? 'volume-mute-outline' : 'volume-high-outline'} size={21} />
+            </Pressable>
+          )}
         </View>
       )}
     </View>
@@ -210,6 +242,7 @@ function PostPage({
   const [paused, setPaused] = useState(false)
   const [status, setStatus] = useState<PlaybackStatus>('loading')
   const [retry, setRetry] = useState(0)
+  const playRequest = useRef<(() => void) | null>(null)
   return (
     <View
       testID={`video-page-${post.id}`}
@@ -231,14 +264,25 @@ function PostPage({
           paused={paused || obscured}
           fit={post.videoFit}
           onStatus={setStatus}
+          playRequestRef={playRequest}
         />
       )}
       <Pressable
         accessible={active}
         accessibilityRole="button"
-        accessibilityLabel={status === 'error' ? 'Retry video' : paused ? 'Play video' : 'Pause video'}
+        accessibilityLabel={
+          status === 'error'
+            ? 'Retry video'
+            : status === 'autoplayBlocked'
+              ? 'Play video with sound'
+              : paused
+                ? 'Play video'
+                : 'Pause video'
+        }
         onPress={() => {
-          if (status === 'error') {
+          if (status === 'autoplayBlocked') {
+            playRequest.current?.()
+          } else if (status === 'error') {
             setStatus('loading')
             setPaused(false)
             setRetry((attempt) => attempt + 1)
@@ -257,7 +301,7 @@ function PostPage({
         locations={[0, 0.25, 0.44, 0.72, 1]}
         style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
       />
-      {active && (paused || status === 'loading' || status === 'error') && (
+      {active && (paused || status === 'loading' || status === 'error' || status === 'autoplayBlocked') && (
         <View pointerEvents="none" style={s.play}>
           <View style={s.playCircle}>
             <Icon
@@ -272,6 +316,9 @@ function PostPage({
             />
           </View>
           {status === 'error' && <Txt style={{ marginTop: 10, fontWeight: '700' }}>Tap to retry</Txt>}
+          {status === 'autoplayBlocked' && (
+            <Txt style={{ marginTop: 10, fontWeight: '700' }}>Tap to play with sound</Txt>
+          )}
         </View>
       )}
     </View>
@@ -296,20 +343,22 @@ function PostOverlay({
   return (
     <View testID="post-overlay" pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <View style={[s.actions, { bottom: bottom + 14 }, compact && { gap: 4 }]}>
-        <Pressable
-          testID="invest-post"
-          accessibilityRole="button"
-          accessibilityLabel="Back this post"
-          accessibilityHint="Open this post's mock SKR market"
-          onPress={() => onBack(post)}
-          style={({ pressed }) => [s.invest, pressed && { opacity: 0.8 }]}
-        >
-          <Image
-            source={require('../../assets/brand/eye.png')}
-            style={{ width: 29, height: 29 }}
-            resizeMode="contain"
-          />
-        </Pressable>
+        {post.market && (
+          <Pressable
+            testID="invest-post"
+            accessibilityRole="button"
+            accessibilityLabel="Back this post"
+            accessibilityHint="Open this post's mock SKR market"
+            onPress={() => onBack(post)}
+            style={({ pressed }) => [s.invest, pressed && { opacity: 0.8 }]}
+          >
+            <Image
+              source={require('../../assets/brand/eye.png')}
+              style={{ width: 29, height: 29 }}
+              resizeMode="contain"
+            />
+          </Pressable>
+        )}
         <Action
           compact={compact}
           icon={liked.includes(post.id) ? 'heart' : 'heart-outline'}
@@ -442,11 +491,12 @@ const s = StyleSheet.create({
     height: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
+    gap: 12,
     paddingLeft: 0,
   },
-  tab: { height: 48, minWidth: 48, flexShrink: 1, justifyContent: 'center' },
-  tabText: { fontWeight: '700', color: c.muted, fontSize: 16 },
+  tabList: { gap: 12, alignItems: 'center' },
+  tab: { height: 48, minWidth: 48, justifyContent: 'center' },
+  tabText: { fontWeight: '700', color: c.muted, fontSize: 14 },
   tabUnderline: {
     position: 'absolute',
     bottom: 1,

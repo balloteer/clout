@@ -3,7 +3,14 @@ import { Asset } from 'expo-asset'
 import type { FeedVideoProps } from './feed-video'
 
 // The browser player handles rejected play promises during rapid tab/source changes.
-export function FeedVideo({ source, muted, paused, onStatus, fit = 'cover' }: FeedVideoProps) {
+export function FeedVideo({
+  source,
+  muted,
+  paused,
+  onStatus,
+  playRequestRef,
+  fit = 'cover',
+}: FeedVideoProps) {
   const ref = useRef<HTMLVideoElement>(null)
   const uri = typeof source === 'number' ? Asset.fromModule(source).uri : source
   const play = useCallback(() => {
@@ -13,14 +20,28 @@ export function FeedVideo({ source, muted, paused, onStatus, fit = 'cover' }: Fe
       video.pause()
       return
     }
-    void video.play().catch((error: unknown) => {
-      if (video !== ref.current || (error instanceof DOMException && error.name === 'AbortError')) return
-      onStatus('error')
-    })
+    void video
+      .play()
+      .then(() => {
+        if (video === ref.current) onStatus('readyToPlay')
+      })
+      .catch((error: unknown) => {
+        if (video !== ref.current || (error instanceof DOMException && error.name === 'AbortError')) return
+        onStatus(
+          error instanceof DOMException && error.name === 'NotAllowedError' ? 'autoplayBlocked' : 'error',
+        )
+      })
   }, [paused, onStatus])
   useEffect(() => {
     play()
-  }, [play, uri])
+  }, [play, uri, muted])
+  useEffect(() => {
+    if (!playRequestRef) return
+    playRequestRef.current = play
+    return () => {
+      if (playRequestRef.current === play) playRequestRef.current = null
+    }
+  }, [play, playRequestRef])
   useEffect(() => {
     document.addEventListener('visibilitychange', play)
     return () => document.removeEventListener('visibilitychange', play)

@@ -3,19 +3,20 @@ import { AppState, StyleSheet } from 'react-native'
 import { useEvent } from 'expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 
-export type PlaybackStatus = 'idle' | 'loading' | 'readyToPlay' | 'error'
+export type PlaybackStatus = 'idle' | 'loading' | 'readyToPlay' | 'error' | 'autoplayBlocked'
 export type FeedVideoProps = {
   source: string | number
   muted: boolean
   paused: boolean
   fit?: 'cover' | 'contain'
   onStatus: (status: PlaybackStatus) => void
+  playRequestRef?: { current: (() => void) | null }
 }
 
 export function FeedVideo({ source, muted, paused, onStatus, fit = 'cover' }: FeedVideoProps) {
   const player = useVideoPlayer(source, (p) => {
     p.loop = true
-    p.muted = true
+    p.muted = muted
   })
   const { status } = useEvent(player, 'statusChange', { status: player.status })
   useEffect(() => onStatus(status), [onStatus, status])

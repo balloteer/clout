@@ -1,4 +1,4 @@
-/** Additive, target-bound catalog import. Dry-run unless --apply; never modifies or deletes existing rows. */
+/** Target-bound demo catalog sync. Never replaces a live market or edits user content. */
 import { readFile } from 'node:fs/promises'
 import { parseEnv } from 'node:util'
 import { resolve } from 'node:path'
@@ -7,11 +7,12 @@ import postgres from 'postgres'
 import { Connection } from '@solana/web3.js'
 import { createMarketService, DEVNET_GENESIS_HASH } from '../packages/markets/src/index.ts'
 import { demoPosts, demoProfiles } from '../apps/api/src/fixtures.ts'
+import { sampleContent } from '../packages/shared/src/sample-content.ts'
 import { sampleMarkets, sampleQuoteMint, sampleMarketConfig } from '../packages/shared/src/sample-markets.ts'
 import { validateTarget, SetupError } from './db-setup.mjs'
 import { databaseTls } from './db-tls.mjs'
 
-export function buildSampleSeed(mediaOrigin) {
+export function buildSampleSeed(mediaOrigin, registry = sampleMarkets) {
   const origin = new URL(mediaOrigin)
   if (
     (origin.protocol !== 'https:' &&
@@ -23,10 +24,30 @@ export function buildSampleSeed(mediaOrigin) {
     origin.hash
   )
     throw new SetupError('Use an HTTPS API origin, or a loopback HTTP API for local development.')
-  if (demoPosts.length < 50 || Object.keys(sampleMarkets).length < 30)
-    throw new SetupError('The verified 50-post/30-market catalog is incomplete.')
+  if (demoPosts.length !== 68 || Object.keys(registry).length !== 68)
+    throw new SetupError('The verified 68-post/68-market catalog is incomplete.')
+  const mints = new Set()
+  const pools = new Set()
+  for (const post of demoPosts) {
+    const market = registry[post.id]
+    if (
+      !market ||
+      market.postId !== post.id ||
+      !market.creatorWallet ||
+      !market.signature ||
+      !market.baseMint ||
+      !market.dbcPool ||
+      mints.has(market.baseMint) ||
+      pools.has(market.dbcPool)
+    )
+      throw new SetupError('Every catalog post must have a distinct verified market and creator.')
+    mints.add(market.baseMint)
+    pools.add(market.dbcPool)
+  }
   const posts = demoPosts.map((post) => ({
     ...post,
+    creatorWallet: registry[post.id].creatorWallet,
+    market: { baseMint: registry[post.id].baseMint, dbcPool: registry[post.id].dbcPool },
     videoUrl: new URL(post.videoUrl, origin).href,
     thumbnailUrl: new URL(post.thumbnailUrl, origin).href,
   }))
@@ -37,7 +58,7 @@ export function buildSampleSeed(mediaOrigin) {
         wallet,
         handle: 'Clout devnet samples',
         displayName: 'Clout samples',
-        bio: 'Licensed sample content. Isolated devnet market creator; no Seeker verification.',
+        bio: 'Clout demo-market operator. Original publishers retain video attribution and do not endorse these devnet test markets.',
         avatar: null,
         seekerVerified: false,
         reputation: 0,
@@ -54,6 +75,18 @@ const fingerprint = (post) =>
     post.videoUrl,
     post.thumbnailUrl,
     post.demo,
+    post.streamUid,
+    post.createdAt,
+    post.tags,
+    post.source
+      ? [
+          post.source.provider,
+          post.source.accountHandle,
+          post.source.postId,
+          post.source.url,
+          post.source.publishedAt ?? null,
+        ]
+      : null,
     post.market?.baseMint ?? null,
     post.market?.dbcPool ?? null,
   ])
@@ -61,17 +94,37 @@ const fingerprint = (post) =>
 export async function seedInTransaction(db, seed, apply = false) {
   if (apply) await db.query('lock table public.posts, public.profiles in share row exclusive mode')
   const existing = (
-    await db.query('select id, data from public.posts where id = any($1::text[])', [
-      seed.posts.map((post) => post.id),
-    ])
+    await db.query(
+      'select id, creator_wallet, status, stream_uid, data from public.posts where id = any($1::text[])',
+      [seed.posts.map((post) => post.id)],
+    )
   ).rows
-  const byId = new Map(existing.map((row) => [row.id, row.data]))
+  const byId = new Map(existing.map((row) => [row.id, row]))
+  const upgrades = []
   for (const post of seed.posts) {
-    const previous = byId.get(post.id)
-    if (previous && fingerprint(previous) !== fingerprint(post))
-      throw new SetupError(
-        `Existing post ${post.id} conflicts with the licensed catalog; no rows were changed.`,
-      )
+    const row = byId.get(post.id)
+    if (!row) continue
+    const previous = row.data
+    const consistent =
+      row.creator_wallet === previous?.creatorWallet &&
+      row.status === previous?.status &&
+      row.stream_uid === previous?.streamUid
+    if (consistent && fingerprint(previous) === fingerprint(post)) continue
+    // Only the original licensed sample row may gain its first market. Match
+    // every catalog field, preserving timestamps, extra JSON fields and socials.
+    const editorial = sampleContent.find((sample) => sample.id === post.id)
+    const original = { ...post, creatorWallet: editorial?.creatorWallet, market: null }
+    if (
+      consistent &&
+      editorial &&
+      previous?.demo === true &&
+      previous?.market === null &&
+      fingerprint(previous) === fingerprint(original)
+    ) {
+      upgrades.push(post)
+      continue
+    }
+    throw new SetupError(`Existing post ${post.id} conflicts with the demo catalog; no rows were changed.`)
   }
   const pending = seed.posts.filter((post) => !byId.has(post.id))
   if (apply) {
@@ -91,13 +144,22 @@ export async function seedInTransaction(db, seed, apply = false) {
       if (inserted.rows.length !== 1 || fingerprint(inserted.rows[0].data) !== fingerprint(post))
         throw new SetupError('Seed post JSON serialization failed; transaction must be rolled back.')
     }
+    for (const post of upgrades) {
+      const updated = await db.query(
+        'update public.posts set creator_wallet=$2,data=data || $3::jsonb where id=$1 returning data',
+        [post.id, post.creatorWallet, { creatorWallet: post.creatorWallet, market: post.market }],
+      )
+      if (updated.rows.length !== 1 || fingerprint(updated.rows[0].data) !== fingerprint(post))
+        throw new SetupError('Seed market attachment failed; transaction must be rolled back.')
+    }
   }
   return {
     mode: apply ? 'applied' : 'dry-run',
     catalogPosts: seed.posts.length,
     verifiedMarkets: seed.posts.filter((post) => post.market).length,
     newPosts: pending.length,
-    unchangedPosts: existing.length,
+    attachedMarkets: upgrades.length,
+    unchangedPosts: existing.length - upgrades.length,
   }
 }
 async function main() {
@@ -124,9 +186,15 @@ async function main() {
     quoteDecimals: 6,
     dbcConfigAddress: sampleMarketConfig,
   })
-  for (const entry of Object.values(sampleMarkets)) {
-    const status = (await chain.getSignatureStatuses([entry.signature], { searchTransactionHistory: true }))
-      .value[0]
+  const entries = Object.values(sampleMarkets)
+  const statuses = (
+    await chain.getSignatureStatuses(
+      entries.map((entry) => entry.signature),
+      { searchTransactionHistory: true },
+    )
+  ).value
+  for (const [index, entry] of entries.entries()) {
+    const status = statuses[index]
     if (status?.err || status?.confirmationStatus !== 'finalized')
       throw new SetupError(`Unverified devnet receipt for ${entry.postId}.`)
     const state = await markets.inspectMarket(entry)
@@ -136,6 +204,9 @@ async function main() {
       state.config !== sampleMarketConfig
     )
       throw new SetupError(`Market account mismatch for ${entry.postId}.`)
+    // The public devnet endpoint limits account reads. Keep complete verification
+    // sequential and paced rather than issuing a burst alongside wallet traffic.
+    if (index < entries.length - 1) await new Promise((resolve) => setTimeout(resolve, 2000))
   }
   const sql = postgres(target.url.toString(), {
     ssl: databaseTls(target.url),

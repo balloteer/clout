@@ -26,6 +26,8 @@ try {
     )
     await page.getByRole('button', { name: 'Back this post', exact: true }).waitFor()
     await page.waitForFunction(() => document.querySelector('video')?.readyState >= 3)
+    const playWithSound = page.getByRole('button', { name: 'Play video with sound', exact: true })
+    if (await playWithSound.isVisible()) await playWithSound.click()
     await page.waitForFunction(() => document.querySelector('video')?.currentTime > 0.2)
     assert.match(await page.title(), /Seek the best content, win SKR/)
     assert.equal(await page.locator('video').count(), 1, 'only one active player')
@@ -35,14 +37,7 @@ try {
       'Seeker video aspect ratio',
     )
     const controls = []
-    for (const name of [
-      'Unmute video',
-      'Like post',
-      'Open comments',
-      'Save post',
-      'Share',
-      'Back this post',
-    ]) {
+    for (const name of ['Mute video', 'Like post', 'Open comments', 'Save post', 'Share', 'Back this post']) {
       const box = await page.getByRole('button', { name, exact: true }).boundingBox()
       assert.ok(box && box.width >= 48 && box.height >= 48, `${name} has a 48px touch target`)
       assert.ok(
@@ -69,9 +64,10 @@ try {
       .getByRole('button', { name: 'Play video', exact: true })
       .click({ position: { x: frame.width / 2, y: frame.height * 0.3 } })
     await page.waitForFunction(() => !document.querySelector('video')?.paused)
+    await page.getByRole('button', { name: 'Mute video', exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('video')?.muted === true)
     await page.getByRole('button', { name: 'Unmute video', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('video')?.muted === false)
-    await page.getByRole('button', { name: 'Mute video', exact: true }).click()
     const firstSource = await page.locator('video').getAttribute('src')
     await swipeVideo(page, 1)
     assert.notEqual(await page.locator('video').getAttribute('src'), firstSource)

@@ -1,6 +1,6 @@
 # Curated preview videos
 
-The preview catalog includes 18 public videos: six Solana, six SKR and six AI posts. They appear in alternating topics ahead of the 50 bundled sample clips. The 30 existing devnet sample markets stay attached to their original posts. Curated videos have no invented market, creator wallet, endorsement or imported social count. Likes and follows are local preview preferences.
+The preview catalog includes 18 public videos: six Solana, six SKR and six AI posts. They appear in alternating topics ahead of the 50 bundled sample clips. All 68 videos now have finalized mock-SKR devnet markets, preserving the original 30 registrations. The curated videos use real Clout-operated demo markets; their source publishers are not represented as market owners or endorsers. Imported social counts are not invented. Likes and follows are local preview preferences.
 
 Videos stream from the original X media CDN; they are not bundled or rehosted. Every video and poster returned HTTP 200 during the October 13, 2026 source check. Network access is required; removed media can be retried or opened via its original-post link. Original aspect ratios are contained within the Seeker 40:89 frame. A visible date distinguishes historical announcements. The comment action opens the original conversation.
 

@@ -4,17 +4,49 @@ import { readFile } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 import postgres from 'postgres'
 import { buildSampleSeed, seedInTransaction } from './seed-samples.mjs'
+import { demoPosts, demoProfiles } from '../apps/api/src/fixtures.ts'
+import { sampleContent } from '../packages/shared/src/sample-content.ts'
 
-test('sample seed binds 50 licensed posts to 30 verified markets and safe media origins', () => {
-  const seed = buildSampleSeed('https://api.clout.example')
-  assert.equal(seed.posts.length, 50)
-  assert.equal(seed.posts.filter((post) => post.market).length, 30)
-  assert.equal(new Set(seed.posts.map((post) => post.id)).size, 50)
+const registry = Object.fromEntries(
+  demoPosts.map((post, index) => [
+    post.id,
+    {
+      postId: post.id,
+      creatorWallet: 'fixture-operator',
+      baseMint: `fixture-mint-${index}`,
+      dbcPool: `fixture-pool-${index}`,
+      signature: `fixture-receipt-${index}`,
+    },
+  ]),
+)
+const seedFor = (origin) => buildSampleSeed(origin, registry)
+
+test('demo seed binds 68 attributed posts to 68 distinct markets and safe media origins', () => {
+  const seed = seedFor('https://api.clout.example')
+  assert.equal(seed.posts.length, 68)
+  assert.equal(seed.posts.filter((post) => post.market).length, 68)
+  assert.equal(new Set(seed.posts.map((post) => post.id)).size, 68)
+  assert.ok(seed.posts.every((post) => post.demo && post.creatorWallet === 'fixture-operator'))
+  assert.equal(
+    seed.posts.filter((post) => post.videoUrl.startsWith('https://api.clout.example/v1/samples/media/'))
+      .length,
+    50,
+  )
+  const curated = seed.posts.filter((post) => post.source)
+  assert.equal(curated.length, 18)
   assert.ok(
-    seed.posts.every(
-      (post) => post.demo && post.videoUrl.startsWith('https://api.clout.example/v1/samples/media/'),
+    curated.every(
+      (post) =>
+        post.source.provider === 'x' &&
+        post.source.url.startsWith('https://x.com/') &&
+        post.source.publishedAt &&
+        post.source.accountHandle !== post.creatorWallet,
     ),
   )
+  assert.throws(() => buildSampleSeed('https://api.example', {}), /incomplete/)
+  const duplicate = structuredClone(registry)
+  duplicate[demoPosts[1].id].baseMint = duplicate[demoPosts[0].id].baseMint
+  assert.throws(() => buildSampleSeed('https://api.example', duplicate), /distinct/)
   for (const value of [
     'http://remote.example',
     'file:///tmp',
@@ -25,13 +57,13 @@ test('sample seed binds 50 licensed posts to 30 verified markets and safe media 
     assert.throws(() => buildSampleSeed(value))
 })
 
-test('seed DTOs pass through the actual postgres.js JSONB serializer once and retain 30 nested markets', async () => {
+test('seed DTOs pass through the actual postgres.js JSONB serializer once and retain 68 nested markets', async () => {
   const db = new PGlite()
   // Use the installed production driver's actual OID 3802 serializer, not a test JSON imitation.
   // No socket is opened: PGlite executes the resulting wire-value strings as SQL parameters.
   const driver = postgres('postgresql://synthetic:synthetic@127.0.0.1/postgres')
   const serializeJsonb = driver.options.serializers[3802]
-  const seed = buildSampleSeed('http://127.0.0.1:8787')
+  const seed = seedFor('http://127.0.0.1:8787')
   const adapter = (tx, corrupt = false) => ({
     query: (text, values = []) => {
       const wireValues = [...values]
@@ -58,13 +90,13 @@ test('seed DTOs pass through the actual postgres.js JSONB serializer once and re
       /JSON serialization failed/,
     )
     assert.equal((await db.query('select count(*)::int n from public.profiles')).rows[0].n, 0)
-    assert.equal((await db.transaction((tx) => seedInTransaction(adapter(tx), seed, true))).newPosts, 50)
+    assert.equal((await db.transaction((tx) => seedInTransaction(adapter(tx), seed, true))).newPosts, 68)
     const [stored] = (
       await db.query(`select count(*)::int as posts,
         count(*) filter(where jsonb_typeof(data) = 'object' and data->>'id' = id)::int as objects,
         count(*) filter(where jsonb_typeof(data->'market') = 'object')::int as markets from public.posts`)
     ).rows
-    assert.deepEqual(stored, { posts: 50, objects: 50, markets: 30 })
+    assert.deepEqual(stored, { posts: 68, objects: 68, markets: 68 })
     assert.equal(
       (
         await db.query(
@@ -83,11 +115,11 @@ test('sample seed is additive, idempotent, preserves profiles and rolls back con
   const db = new PGlite()
   await db.exec('create role anon; create role authenticated;')
   await db.exec(await readFile('supabase/migrations/20261013000133_clout_initial.sql', 'utf8'))
-  const seed = buildSampleSeed('http://127.0.0.1:8787')
+  const seed = seedFor('http://127.0.0.1:8787')
   try {
-    assert.equal((await db.transaction((tx) => seedInTransaction(tx, seed))).newPosts, 50)
+    assert.equal((await db.transaction((tx) => seedInTransaction(tx, seed))).newPosts, 68)
     assert.equal((await db.query('select count(*)::integer n from public.posts')).rows[0].n, 0)
-    assert.equal((await db.transaction((tx) => seedInTransaction(tx, seed, true))).newPosts, 50)
+    assert.equal((await db.transaction((tx) => seedInTransaction(tx, seed, true))).newPosts, 68)
     const owner = seed.profiles[0].wallet
     await db.query(
       "update public.profiles set data=jsonb_set(data,'{displayName}','\"Owner edit\"') where wallet=$1",
@@ -104,7 +136,90 @@ test('sample seed is additive, idempotent, preserves profiles and rolls back con
       db.transaction((tx) => seedInTransaction(tx, changed, true)),
       /conflicts/,
     )
-    assert.equal((await db.query('select count(*)::integer n from public.posts')).rows[0].n, 50)
+    assert.equal((await db.query('select count(*)::integer n from public.posts')).rows[0].n, 68)
+  } finally {
+    await db.close()
+  }
+})
+
+test('catalog expansion preserves 30 markets and user data, attaches only 20 original samples, and inserts 18 attributed sources', async () => {
+  const db = new PGlite()
+  await db.exec('create role anon; create role authenticated;')
+  await db.exec(await readFile('supabase/migrations/20261013000133_clout_initial.sql', 'utf8'))
+  const seed = seedFor('http://127.0.0.1:8787')
+  const original = sampleContent.map((sample, index) => {
+    const current = seed.posts.find((post) => post.id === sample.id)
+    return index < 30
+      ? current
+      : { ...current, creatorWallet: sample.creatorWallet, market: null, operatorNote: 'preserved' }
+  })
+  try {
+    await db.transaction((tx) =>
+      seedInTransaction(tx, { posts: original, profiles: [...demoProfiles, ...seed.profiles] }, true),
+    )
+    const before = (
+      await db.query("select id, data from public.posts where data->'market' <> 'null'::jsonb order by id")
+    ).rows
+    const user = { ...seed.profiles[0], wallet: 'user-wallet', displayName: 'Keep my profile' }
+    const userPost = {
+      ...original[0],
+      id: 'user-post',
+      creatorWallet: user.wallet,
+      demo: false,
+      caption: 'User caption',
+      market: null,
+    }
+    await db.transaction((tx) => seedInTransaction(tx, { profiles: [user], posts: [userPost] }, true))
+    const target = original[40].id
+    await db.query('insert into public.likes(wallet,post_id) values($1,$2)', [user.wallet, target])
+    await db.query('insert into public.comments(id,post_id,wallet,data) values($1,$2,$3,$4::jsonb)', [
+      '11111111-1111-4111-8111-111111111111',
+      target,
+      user.wallet,
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        postId: target,
+        wallet: user.wallet,
+        body: 'Keep my comment',
+        createdAt: '2026-10-13T00:00:00.000Z',
+      },
+    ])
+    const dry = await db.transaction((tx) => seedInTransaction(tx, seed))
+    assert.equal(dry.newPosts, 18)
+    assert.equal(dry.attachedMarkets, 20)
+    assert.equal(dry.unchangedPosts, 30)
+    assert.equal((await db.query('select count(*)::int n from public.posts')).rows[0].n, 51)
+    const result = await db.transaction((tx) => seedInTransaction(tx, seed, true))
+    assert.equal(result.attachedMarkets, 20)
+    assert.equal(result.newPosts, 18)
+    for (const previous of before) {
+      assert.deepEqual(
+        (await db.query('select data from public.posts where id=$1', [previous.id])).rows[0].data,
+        previous.data,
+      )
+    }
+    const upgraded = (await db.query('select creator_wallet,data from public.posts where id=$1', [target]))
+      .rows[0]
+    assert.equal(upgraded.creator_wallet, 'fixture-operator')
+    assert.equal(upgraded.data.operatorNote, 'preserved')
+    assert.deepEqual(upgraded.data.market, seed.posts.find((post) => post.id === target).market)
+    assert.deepEqual(
+      (await db.query('select data from public.posts where id=$1', ['user-post'])).rows[0].data,
+      userPost,
+    )
+    assert.equal((await db.query('select count(*)::int n from public.likes')).rows[0].n, 1)
+    assert.equal((await db.query('select count(*)::int n from public.comments')).rows[0].n, 1)
+    const retry = await db.transaction((tx) => seedInTransaction(tx, seed, true))
+    assert.equal(retry.newPosts, 0)
+    assert.equal(retry.attachedMarkets, 0)
+    assert.equal(retry.unchangedPosts, 68)
+    const conflict = structuredClone(seed)
+    conflict.posts.find((post) => post.id === original[0].id).market.baseMint = 'replacement-mint'
+    await assert.rejects(
+      db.transaction((tx) => seedInTransaction(tx, conflict, true)),
+      /conflicts/,
+    )
+    assert.equal((await db.query('select count(*)::int n from public.posts')).rows[0].n, 69)
   } finally {
     await db.close()
   }

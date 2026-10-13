@@ -1,0 +1,71 @@
+package __CLOUT_PACKAGE__
+
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import java.security.MessageDigest
+
+/** Production package certificates published by Solana Mobile, checked 2026-10-13.
+ * https://connect.solanamobile.com/.well-known/assetlinks.json
+ * The app routes locally; this is not a server-verifiable device attestation.
+ */
+internal object SeekerWalletRouter {
+  private val trustedSigners = linkedMapOf(
+    "com.solanamobile.wallet" to setOf(
+      "F2A3C4E033BBCABCBF85467B8F6404442D185A0535FC986EDAD73092BF04133A",
+      "002975EFBC68F9194FC798DCD503D4184350CE38E9CF7343F437F4FA7F154C0A",
+    ),
+    "com.solanamobile.seekerwallet" to setOf(
+      "CD56B5C89E7DC23454854DF29DECDC23D1BD364A9ED08C57C46B0ED5FCBD8A52",
+      "0BF96916FC45B97EFD92EB5DEFB3DB07681B80C5DCA867A1DCA4993CCA4B5BB8",
+    ),
+  )
+
+  fun route(context: Context, intent: Intent): Intent {
+    val uri = intent.data ?: return intent
+    if (intent.action != Intent.ACTION_VIEW || uri.scheme != "solana-wallet" ||
+        !uri.authority.isNullOrEmpty() || uri.path != "/v1/associate/local") return intent
+
+    val manager = context.packageManager
+    for ((packageName, certificates) in trustedSigners) {
+      if (!hasTrustedSigner(manager, packageName, certificates)) continue
+      val candidate = Intent(intent).apply {
+        component = null
+        selector = null
+        setPackage(packageName)
+      }
+      @Suppress("DEPRECATION")
+      val handler = manager.resolveActivity(candidate, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo
+        ?: continue
+      if (handler.packageName != packageName || !handler.enabled || !handler.exported ||
+          !handler.applicationInfo.enabled) continue
+      candidate.component = ComponentName(packageName, handler.name)
+      return candidate
+    }
+    throw ActivityNotFoundException(
+      "CLOUT_SEEKER_WALLET_REQUIRED: Install or update the official Seed Vault Wallet on your Seeker. No other wallet was opened.",
+    )
+  }
+
+  @Suppress("DEPRECATION")
+  private fun hasTrustedSigner(manager: PackageManager, packageName: String, allowed: Set<String>): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
+    val info = try {
+      manager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+    } catch (_: PackageManager.NameNotFoundException) {
+      return false
+    } catch (_: SecurityException) {
+      return false
+    }
+    val signers = info.signingInfo?.apkContentsSigners ?: return false
+    // Require every current signer; an untrusted signer or test/staging package cannot qualify.
+    return signers.isNotEmpty() && signers.all { signer ->
+      val digest = MessageDigest.getInstance("SHA-256").digest(signer.toByteArray())
+      val fingerprint = digest.joinToString("") { byte -> "%02X".format(byte.toInt() and 0xff) }
+      fingerprint in allowed
+    }
+  }
+}

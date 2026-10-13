@@ -10,7 +10,7 @@
     "build": "expo export --platform web",
     "build:android": "expo export --platform android",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/*.test.ts"
+    "test": "tsx --test src/lib/*.test.ts && node --test plugins/*.test.cjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.5",

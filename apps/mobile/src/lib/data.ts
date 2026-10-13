@@ -1,6 +1,7 @@
 import { sampleContent } from '../../../../packages/shared/src/sample-content'
 import { sampleMarkets } from '../../../../packages/shared/src/sample-markets'
 import curatedContent from './curated-content.json'
+import { interleaveMarkets } from './catalog'
 
 export type Post = {
   id: string
@@ -229,6 +230,7 @@ const sampleAssets: Record<string, { poster: number; video: number }> = {
 }
 export const curatedPosts: Post[] = curatedContent.map((post) => ({
   id: post.id,
+  creatorWallet: sampleMarkets[post.id]?.creatorWallet,
   creator: post.creator,
   avatar: post.creator.charAt(0),
   caption: post.caption,
@@ -242,7 +244,7 @@ export const curatedPosts: Post[] = curatedContent.map((post) => ({
   comments: 0,
   views: '',
   backers: 0,
-  market: false,
+  market: !!sampleMarkets[post.id],
   sample: true,
   duration: `${Math.floor(post.durationSeconds / 60)}:${String(post.durationSeconds % 60).padStart(2, '0')}`,
 }))
@@ -267,7 +269,7 @@ const bundledPosts: Post[] = sampleContent.map((post) => {
     duration: `0:${String(post.durationSeconds).padStart(2, '0')}`,
   }
 })
-export const samplePosts: Post[] = [...curatedPosts, ...bundledPosts]
+export const samplePosts: Post[] = interleaveMarkets([...curatedPosts, ...bundledPosts])
 export const sampleComments: Record<string, { id: string; name: string; text: string }[]> = {}
 export const mediaCredits =
   '18 curated videos from public X posts about Solana, SKR and AI. Publisher attribution, original date and source link accompany each video; source playback requires internet. These creators have not endorsed Clout. ' +

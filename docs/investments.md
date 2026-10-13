@@ -1,0 +1,14 @@
+# Video investments
+
+Tapping the feed eye opens **Video investments**: the post identity, current Mock SKR in its market, recorded backing graph, and then buy/sell controls. Clout keeps its Titan One / DM Sans typography, ink surface, cream text, lime amount and chart, and original eye artwork.
+
+The layout follows the hierarchy visible in Giggles’ [official Google Play screenshots](https://play.google.com/store/apps/details?id=com.giggles.mb): post header, prominent amount, large graph, then investment and sale actions. The [official investment screenshot](https://play-lh.googleusercontent.com/iY72w4kWUor0xVCPerR10-oU3cip3JbbMhm9NgBykzRErGzQzrYoTwDWVqiMTdSJJwetIfzKwO4RMJX5A72hrQ=w1200) was inspected directly. Clout does not invent the reference’s percentage changes, trader avatars or time ranges.
+
+The two measurements are deliberately separate:
+
+- **SKR in this market** reads the current DBC quote reserve from the public activity endpoint, independent of the connected wallet. Unavailable or migrated pool data displays an unavailable state, never an assumed zero.
+- **Recorded backing** charts net Mock SKR flow (recorded buys minus recorded sells) over the latest 100 Clout trades, beginning at zero for that window. It uses trade order, can be negative, and is not historical pool liquidity or the viewer’s position value. Fees and trades outside Clout can make it differ from the current reserve.
+
+The graph uses only returned points. A confirmed zero reserve and empty history invite the first backing; empty recorded history with a nonzero reserve says no Clout trades are recorded. Data refreshes every 20 seconds, on explicit refresh, and after a confirmed trade. Failed refreshes identify previously loaded data. Wallet approval, quote expiry, slippage limits and pending-transaction recovery remain unchanged.
+
+Display normalization uses integer arithmetic before converting chart coordinates; token labels retain exact decimal amounts, including negative net flows. Seeker layout review uses 400 × 890 CSS pixels at device scale 3. Browser fixture evidence lives under `artifacts/investment-review/`; fixtures do not prove live chain activity.

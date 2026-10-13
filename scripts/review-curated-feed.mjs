@@ -58,6 +58,9 @@ try {
   page.on('pageerror', (error) => report.errors.push(error.message))
   await page.goto(base)
   await page.getByRole('button', { name: 'Back this post', exact: true }).waitFor()
+  // A user gesture allows audible playback on browser previews.
+  await page.getByRole('button', { name: 'Mute video', exact: true }).click()
+  await page.getByRole('button', { name: 'Unmute video', exact: true }).click()
   for (let index = 0; index < 3; index++) {
     const expected = catalog[index]
     await page
@@ -161,9 +164,7 @@ try {
       if (style.lineHeight !== 'normal') element.style.lineHeight = `${parseFloat(style.lineHeight) * 1.5}px`
     }
   })
-  report.mute320Text150 = await visibleControl(
-    page.getByRole('button', { name: 'Unmute video', exact: true }),
-  )
+  report.mute320Text150 = await visibleControl(page.getByRole('button', { name: 'Mute video', exact: true }))
   await page.screenshot({ path: `${output}/curated-320-text150.png` })
   await context.close()
 

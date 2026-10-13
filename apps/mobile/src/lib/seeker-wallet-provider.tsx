@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from '@solana/kit'
 import { WalletContext } from './wallet-context'
-import { API_URL, postJson, setSessionToken, onSessionInvalidated } from './api'
+import { API_URL, api, postJson, setSessionToken, onSessionInvalidated } from './api'
 import { getPending } from './transactions'
 import { persistThenBroadcast } from './submission'
 import {
@@ -27,6 +27,10 @@ export type SeekerTransport = {
   write: (value: string) => Promise<void>
   clear: () => Promise<void>
   authorize: (previous?: SeekerAuthorization) => Promise<SeekerAuthorization>
+  authenticate?: (
+    previous: SeekerAuthorization | undefined,
+    getMessage: (authorization: SeekerAuthorization) => Promise<Uint8Array>,
+  ) => Promise<{ authorization: SeekerAuthorization; payload: Uint8Array }>
   signMessage: (
     authorization: SeekerAuthorization,
     message: Uint8Array,
@@ -50,11 +54,28 @@ export function SeekerWalletProvider({
   const operation = useRef(false)
   const generation = useRef(0)
   const current = useRef<Stored | undefined>(undefined)
+  const validate = (value: unknown, expectedAddress?: string) =>
+    validateSeekerAuthorization(value, expectedAddress, transport.native ? 'native' : 'web')
+  async function discardRejectedAuthorization(error: unknown) {
+    if (
+      transport.native &&
+      error &&
+      typeof error === 'object' &&
+      'walletAuthorizationInvalidated' in error &&
+      error.walletAuthorizationInvalidated === true
+    ) {
+      current.current = undefined
+      setAuthorization(undefined)
+      setSession(undefined)
+      setSessionToken(undefined)
+      await transport.clear()
+    }
+  }
 
   async function remember(next: SeekerAuthorization, nextSession?: Session) {
     const stored: Stored = {
       policy: SEEKER_STORAGE_KEY,
-      authorization: validateSeekerAuthorization(next),
+      authorization: validate(next),
       session: nextSession,
     }
     await transport.write(JSON.stringify(stored))
@@ -73,7 +94,11 @@ export function SeekerWalletProvider({
         if (!raw || !active || generation.current !== revision) return
         const stored = JSON.parse(raw) as Stored
         if (stored.policy !== SEEKER_STORAGE_KEY) return
-        const auth = validateSeekerAuthorization(stored.authorization)
+        const auth = validateSeekerAuthorization(
+          stored.authorization,
+          undefined,
+          transport.native ? 'native' : 'web',
+        )
         const restoredSession =
           stored.session && Date.parse(stored.session.expiresAt) > Date.now() ? stored.session : undefined
         current.current = { policy: SEEKER_STORAGE_KEY, authorization: auth, session: restoredSession }
@@ -120,15 +145,55 @@ export function SeekerWalletProvider({
     generation.current++
     setBusy(true)
     try {
-      let auth = validateSeekerAuthorization(await transport.authorize(current.current?.authorization))
+      if (transport.native) {
+        let config: { name?: string; mode?: string; network?: string }
+        try {
+          if (!API_URL) throw new Error('No API configured')
+          config = await api('/v1/config', { signal: AbortSignal.timeout(5000) })
+        } catch {
+          throw Object.assign(
+            new Error('The Clout server could not be reached. Please reconnect and try again.'),
+            {
+              code: 'CLOUT_API_UNREACHABLE',
+            },
+          )
+        }
+        if (config.name !== 'Clout' || config.mode !== 'connected' || config.network !== 'devnet')
+          throw Object.assign(
+            new Error('This Clout server is not configured for connected devnet sign-in.'),
+            {
+              code: 'CLOUT_API_CONFIG_INVALID',
+            },
+          )
+      }
+      let auth: SeekerAuthorization
       let nextSession: Session | undefined
       if (API_URL) {
-        const challenge = await postJson<{ challengeId: string; message: string }>('/v1/auth/challenge', {
-          address: auth.address,
-        })
-        const message = new TextEncoder().encode(challenge.message)
-        const signed = await transport.signMessage(auth, message)
-        auth = validateSeekerAuthorization(signed.authorization, auth.address)
+        let challenge: { challengeId: string; message: string } | undefined
+        let message: Uint8Array | undefined
+        let authorizedAddress: string | undefined
+        const getMessage = async (next: SeekerAuthorization) => {
+          auth = validate(next)
+          authorizedAddress = auth.address
+          // Retain a freshly rotated wallet token even if API login or signing
+          // is interrupted. This alone never exposes an authenticated session.
+          await remember(auth)
+          const issued = await postJson<{ challengeId: string; message: string }>('/v1/auth/challenge', {
+            address: auth.address,
+          })
+          challenge = issued
+          message = new TextEncoder().encode(issued.message)
+          return message
+        }
+        const signed = transport.authenticate
+          ? await transport.authenticate(current.current?.authorization, getMessage)
+          : await (async () => {
+              const next = validate(await transport.authorize(current.current?.authorization))
+              return transport.signMessage(next, await getMessage(next))
+            })()
+        if (!challenge || !message || !authorizedAddress)
+          throw new Error('The wallet did not request a sign-in challenge.')
+        auth = validate(signed.authorization, authorizedAddress)
         const parts = signedMessageParts(signed.payload, message)
         const result = await postJson<{
           token: string
@@ -144,8 +209,11 @@ export function SeekerWalletProvider({
           expiresAt: result.expiresAt,
           profile: { name: result.profile.handle, seeker: result.profile.seekerVerified },
         }
-      }
+      } else auth = validate(await transport.authorize(current.current?.authorization))
       await remember(auth, nextSession)
+    } catch (error) {
+      await discardRejectedAuthorization(error)
+      throw error
     } finally {
       operation.current = false
       setBusy(false)
@@ -178,7 +246,7 @@ export function SeekerWalletProvider({
     const auth = current.current?.authorization
     if (!transport.available || !auth || (API_URL && !current.current?.session))
       throw new Error('Connect your Seeker wallet first.')
-    validateSeekerAuthorization(auth)
+    validate(auth)
     operation.current = true
     setBusy(true)
     try {
@@ -188,10 +256,7 @@ export function SeekerWalletProvider({
       return await persistThenBroadcast({
         sign: async () => {
           const signed = await transport.signTransaction(auth, decoded)
-          await remember(
-            validateSeekerAuthorization(signed.authorization, auth.address),
-            current.current?.session,
-          )
+          await remember(validate(signed.authorization, auth.address), current.current?.session)
           return signed.transaction
         },
         signature: getSignatureFromTransaction,
@@ -207,6 +272,9 @@ export function SeekerWalletProvider({
             })
             .send(),
       })
+    } catch (error) {
+      await discardRejectedAuthorization(error)
+      throw error
     } finally {
       operation.current = false
       setBusy(false)

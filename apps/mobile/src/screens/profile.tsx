@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { useWallet } from '../lib/wallet'
 import { useApp } from '../lib/store'
 import { api, API_URL, postJson } from '../lib/api'
@@ -36,6 +36,7 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
   const [pending, setPending] = useState<PendingTransaction | null>(null)
   const [recoveryError, setRecoveryError] = useState('')
   const [error, setError] = useState('')
+  const [balanceError, setBalanceError] = useState('')
   const [loading, setLoading] = useState(!!wallet.address)
   const [busy, setBusy] = useState(false)
   const [eligibility, setEligibility] = useState('')
@@ -43,6 +44,10 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
   const load = useCallback(async () => {
     const version = ++generation.current
     if (!wallet.address) return
+    setLoading(true)
+    setError('')
+    setBalanceError('')
+    setRecoveryError('')
     try {
       const recovery = await getPending(wallet.address)
       if (version === generation.current) setPending(recovery)
@@ -50,7 +55,9 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
       if (version === generation.current)
         setRecoveryError(err instanceof Error ? err.message : 'Could not read transaction recovery.')
     }
+    if (version !== generation.current) return
     if (!API_URL) {
+      setBalanceError('Wallet balances are unavailable in this preview.')
       setLoading(false)
       return
     }
@@ -69,10 +76,12 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
           ? identityResult.reason.message
           : 'Could not load your profile.',
       )
-    if (portfolioResult.status === 'fulfilled') setPortfolio(portfolioResult.value)
-    else {
+    if (portfolioResult.status === 'fulfilled') {
+      setPortfolio(portfolioResult.value)
+      if (!portfolioResult.value.balance) setBalanceError('Your SKR balance is temporarily unavailable.')
+    } else {
       setPortfolio(null)
-      setError(
+      setBalanceError(
         portfolioResult.reason instanceof Error
           ? portfolioResult.reason.message
           : 'Wallet balances are unavailable.',
@@ -82,13 +91,23 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
     setLoading(false)
   }, [wallet.address])
   useEffect(() => {
-    void Promise.resolve().then(load)
+    let active = true
+    const requests = generation
+    const refreshVisible = () => {
+      if (active) void load()
+    }
+    void Promise.resolve().then(refreshVisible)
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshVisible()
+    })
+    return () => {
+      active = false
+      requests.current++
+      subscription.remove()
+    }
   }, [load])
   async function refresh() {
     if (!wallet.address) return
-    setLoading(true)
-    setError('')
-    setRecoveryError('')
     await load()
   }
   async function changed() {
@@ -204,6 +223,50 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
           </Button>
         </View>
       )}
+      <View style={s.balance} testID="profile-skr-balance">
+        <View style={s.balanceRow}>
+          <Icon name="wallet-outline" color={c.lime} size={25} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Txt style={s.small}>Your balance · Mock SKR</Txt>
+            <Txt
+              display
+              style={s.balanceAmount}
+              accessibilityLabel={
+                balance ? `${displayAtomic(balance.amount, balance.decimals)} mock SKR` : undefined
+              }
+            >
+              {balance
+                ? `${displayAtomic(balance.amount, balance.decimals)} SKR`
+                : loading
+                  ? 'Loading…'
+                  : '—'}
+            </Txt>
+          </View>
+          {wallet.address && !!API_URL && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Refresh SKR balance"
+              accessibilityState={{ disabled: loading, busy: loading }}
+              disabled={loading}
+              onPress={() => void refresh()}
+              style={[s.balanceRefresh, loading && { opacity: 0.5 }]}
+            >
+              <Icon name="refresh-outline" color={c.lime} size={22} />
+            </Pressable>
+          )}
+        </View>
+        {!!balanceError ? (
+          <Txt accessibilityRole="alert" style={s.balanceError}>
+            {balanceError}
+          </Txt>
+        ) : loading && balance ? (
+          <Txt style={s.small}>Updating balance…</Txt>
+        ) : !wallet.address ? (
+          <Txt style={s.small}>Connect your wallet to see your balance.</Txt>
+        ) : portfolio?.gasLamports !== undefined ? (
+          <Txt style={s.small}>{displayAtomic(portfolio.gasLamports, 9, 6)} SOL for network fees</Txt>
+        ) : null}
+      </View>
       <View style={s.stats}>
         {[
           [saved.length, 'Saved finds'],
@@ -219,24 +282,6 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
         ))}
       </View>
       <LinkedAccounts onConnect={onConnect} />
-      <Section title="Your SKR">
-        <View style={s.balance}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Txt style={s.small}>Wallet balance · Test SKR</Txt>
-            <Txt display style={{ fontSize: 34, lineHeight: 46 }}>
-              {balance ? displayAtomic(balance.amount, balance.decimals) : '—'}
-            </Txt>
-          </View>
-          <Icon name="wallet-outline" color={c.lime} size={31} />
-        </View>
-        <Txt style={s.small}>
-          {portfolio?.gasLamports
-            ? `${displayAtomic(portfolio.gasLamports, 9, 6)} SOL available for network fees and account rent.`
-            : wallet.address
-              ? 'Connect the market service to load token and SOL balances.'
-              : 'Connect your wallet to see your balance.'}
-        </Txt>
-      </Section>
       {config?.features.seekerVerification ? (
         <Section title="A little Seeker perk">
           <View style={s.reward}>
@@ -400,13 +445,22 @@ const s = StyleSheet.create({
   reward: { backgroundColor: c.surface, borderRadius: 22, padding: 22, borderWidth: 1, borderColor: c.line },
   balance: {
     backgroundColor: c.surface,
-    borderRadius: 20,
-    padding: 22,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: c.line,
+    padding: 14,
+    gap: 5,
+    marginTop: 4,
+  },
+  balanceRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  balanceAmount: { fontSize: 28, lineHeight: 36, color: c.lime },
+  balanceRefresh: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  balanceError: { fontSize: 12, lineHeight: 19, color: c.orange },
   pending: {
     gap: 13,
     marginVertical: 18,

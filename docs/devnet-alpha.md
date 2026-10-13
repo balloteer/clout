@@ -1,9 +1,9 @@
 # Devnet alpha setup
 
-Clout runs only on Solana devnet. The user-funded isolated wallet provisioned a six-decimal mock SKR mint and 30 actual Meteora DBC markets. The 50 licensed five-to-ten-second clips are bundled at 480 × 1068, matching the Seeker panel's 40:89 ratio. Market records in `packages/shared/src/sample-markets.ts` were generated only after finalized launch receipts and on-chain account verification.
+Clout runs only on Solana devnet. The user-funded isolated wallet provisioned a six-decimal mock SKR mint and 68 actual Meteora DBC markets: one for each of the 50 licensed samples and 18 curated Solana, SKR and AI videos. The 50 licensed five-to-ten-second clips are bundled at 480 × 1068, matching the Seeker panel's 40:89 ratio. Market records in `packages/shared/src/sample-markets.ts` were generated only after finalized launch receipts and on-chain account verification.
 
 - Mock SKR mint: `8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC`.
-- Public licensed metadata: <https://clout-devnet-catalog.vercel.app>.
+- Public catalog metadata: <https://clout-devnet-catalog.vercel.app>.
 - Sample market graduation threshold: 1,000 mock SKR. The separate bootstrap rehearsal configuration uses two mock SKR.
 - Complete launch receipts: ignored `artifacts/devnet-sample-markets.json`; public addresses/signatures also live in the shared source registry.
 - Task keys and exact signed transaction journals: ignored `.tooling/devnet/`, with private file permissions. No user wallet file is read.
@@ -12,7 +12,7 @@ The app's sidebar, mobile menu and Profile expose **Mint mock SKR**. This faucet
 
 ## Connect persistent services
 
-The owner’s project `qsboauxywnuhitlpmojw` is connected. All three migrations are applied and verified, and the 50-post/30-market catalog is seeded. The local API runs in connected mode with trading and the daily faucet enabled. The preview at `http://localhost:8081` calls that API and adds 18 curated posts on the client. This does not deploy the API or app publicly.
+The owner’s project `qsboauxywnuhitlpmojw` is connected. All three migrations are applied and verified, and the 68-post/68-market catalog is seeded. The local API runs in connected mode with trading and the daily faucet enabled. The preview at `http://localhost:8081` calls that API and preserves the bundled media and curated source attribution. This does not deploy the API or app publicly.
 
 Save the supplied project's session-pooler `DATABASE_URL` (port 5432) in ignored `apps/api/.env.local`. Do not paste its password into chat. Supabase’s official public CA is bundled and scoped to database TLS; hostname verification stays enabled. Setup commands accept only Supabase project `qsboauxywnuhitlpmojw`, enforce TLS and redact raw connection failures.
 
@@ -36,7 +36,7 @@ node --import tsx scripts/seed-samples.mjs
 node --import tsx scripts/seed-samples.mjs --apply
 ```
 
-The helper verifies devnet genesis, finalized receipts, quote mint, creator and pool configuration before inserting 50 posts. Dry-run is the default. It never replaces existing profiles or posts, and conflicting post IDs roll back the entire import. Bundled media routes whitelist catalog filenames and support byte ranges. A deployed API must include the bundled media directory.
+The helper verifies devnet genesis, all 68 finalized receipts, quote mint, operator and pool configuration before synchronizing the catalog. Dry-run is the default. It preserves existing markets and profiles, inserts missing curated rows, and attaches a first market only to an exact original unmarketed sample row. Conflicting post IDs roll back the entire import. No balances, claims or user content are changed. Bundled media routes whitelist catalog filenames and support byte ranges. A deployed API must include the bundled media directory.
 
 Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env.local` to the API reachable by the device and restart Metro/rebuild the APK. For USB local development, use `http://127.0.0.1:8787` with `adb reverse tcp:8787 tcp:8787`. Native Android uses Mobile Wallet Adapter pinned to the Seeker wallet. Android browser sign-in uses Seeker Connect, also pinned to that wallet; desktop previews remain read-only. See [Seeker wallet setup](seeker-wallet.md), including the browser relay terms.
 
@@ -54,4 +54,10 @@ npx tsx packages/markets/scripts/seed-sample-markets.ts run
 npx tsx packages/markets/scripts/seed-sample-markets.ts verify
 ```
 
-These commands reuse persisted signed bytes and finalized receipts. An expired unknown or failed transaction requires inspection; no replacement launch is silently created. Mock SKR and all post tokens in this alpha have no monetary value.
+The market extension reuses the existing task creator, curve configuration and mint, preserving the original 30 pool addresses. It does not create a new operator or transfer additional funding. These commands reuse persisted signed bytes and finalized receipts. An expired unknown or failed transaction requires inspection; no replacement launch is silently created. Mock SKR and all post tokens in this alpha have no monetary value.
+
+## Complete catalog checkpoint
+
+All 38 missing markets were initialized on devnet, bringing the catalog to 68 distinct post mints and pools. The original 30 registrations remain unchanged. Each launch was simulated, journaled before broadcast, finalized and checked against the existing mock SKR mint, creator and curve configuration. Public receipts live in `packages/shared/src/sample-markets.ts`; no private keys are committed.
+
+The funding wallet is `H8xYY5wr3o8Q4xKK8NDZSf9vb7vxuVvZcgHws9t7kge3`; the existing market operator is `HDXHbGGRibekDCYGHABe16PAzKJWezgbwBniG37KBHGp`. Both are isolated development wallets, and the extension used the operator’s existing devnet SOL. Curated publishers retain their source attribution and do not operate or endorse the Clout demo markets. The Markets tab filters actual references, and the eye appears only on posts with a market.

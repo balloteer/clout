@@ -13,6 +13,13 @@ export type ApiPost = {
   creator?: ApiProfile
   likes?: { count: number; liked: boolean }
   commentCount?: number
+  source?: {
+    provider: 'x' | 'fomo'
+    accountHandle: string
+    postId: string
+    url: string
+    publishedAt?: string
+  }
 }
 export function mapPost(post: ApiPost, index = 0): Post {
   // Licensed bundled content stays available when a verified devnet market is attached.
@@ -30,6 +37,16 @@ export function mapPost(post: ApiPost, index = 0): Post {
     color: bundled?.color ?? ['#C6FF3D', '#FF3D8B', '#3DB8FF'][index % 3],
     poster: bundled?.poster ?? post.thumbnailUrl ?? '',
     video: bundled?.video ?? post.videoUrl ?? '',
+    videoFit: bundled?.videoFit,
+    source:
+      bundled?.source ??
+      (post.source?.publishedAt
+        ? {
+            url: post.source.url,
+            handle: post.source.accountHandle,
+            publishedAt: post.source.publishedAt,
+          }
+        : undefined),
     likes: post.likes?.count ?? 0,
     comments: post.commentCount ?? 0,
     views: '',
