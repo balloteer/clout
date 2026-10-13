@@ -88,7 +88,7 @@ The API should persist quotes through the injectable `QuoteStore`, plus all buil
 
 ## Confirmation and indexing
 
-`reconcile` fetches confirmed transaction metadata and compares its serialized message with the server's persisted `messageBase64`. A client-supplied signature for another successful transfer cannot settle a Clout intent. `reconcileTrade` additionally checks the precise input debit and that the actual output meets the user-approved minimum. Results are `pending`, `expired`, `failed`, or `confirmed`.
+`reconcile` fetches confirmed transaction metadata and compares its serialized message with the server's persisted `messageBase64`. The Seeker wallet may replace only the compute-unit price, capped at 100,000 micro-lamports; the payer, blockhash, accounts, compute limit and every other instruction byte must still match. A client-supplied signature for another successful transfer cannot settle a Clout intent. `reconcileTrade` additionally checks the precise input debit and that the actual output meets the user-approved minimum. Results are `pending`, `expired`, `failed`, or `confirmed`.
 
 For confirmed results, `tokenDeltas` contains actual signed integer balance changes belonging to the transaction owner; `feeLamports` reports SOL network fees separately. A processed error remains pending until confirmed. A known transaction whose metadata has not arrived remains pending even after the blockheight passes, avoiding premature replacements. Deduplicate every confirmed event by signature in the database. Early-backer recognition requires finalized buys; transferred tokens and optimistic UI balances do not establish purchase history.
 

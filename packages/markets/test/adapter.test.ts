@@ -2,7 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import BN from 'bn.js'
-import { Keypair, PublicKey, SystemProgram, Transaction, type Connection } from '@solana/web3.js'
+import {
+  ComputeBudgetProgram,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  type Connection,
+} from '@solana/web3.js'
 import {
   decodeTransferCheckedInstruction,
   getAssociatedTokenAddressSync,
@@ -91,6 +98,34 @@ test('another successful transaction cannot confirm a trade intent', async () =>
     transaction: { message: tx.compileMessage(), signatures: [signature] },
     meta: null,
   })
+  await assert.rejects(adapter.reconcile({ signature, transaction }), { code: 'TRANSACTION_MISMATCH' })
+})
+
+test('Seeker may replace only the bounded priority fee while signing', async () => {
+  const { adapter, connection, transaction, signature, tx } = fixture()
+  const built = new Transaction({ feePayer: owner, recentBlockhash: tx.recentBlockhash }).add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 }),
+    tx.instructions[0],
+  )
+  transaction.messageBase64 = built.serializeMessage().toString('base64')
+  const walletSigned = new Transaction({ feePayer: owner, recentBlockhash: tx.recentBlockhash }).add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+    tx.instructions[0],
+  )
+  connection.getTransaction = async () => ({
+    slot: 123,
+    transaction: { message: walletSigned.compileMessage(), signatures: [signature] },
+    meta: { err: null, fee: 11_000, preBalances: [], postBalances: [] },
+  })
+  assert.equal((await adapter.reconcile({ signature, transaction })).status, 'confirmed')
+
+  walletSigned.instructions[1] = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_001 })
+  await assert.rejects(adapter.reconcile({ signature, transaction }), { code: 'TRANSACTION_MISMATCH' })
+
+  walletSigned.instructions[1] = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 })
+  walletSigned.instructions[0] = ComputeBudgetProgram.setComputeUnitLimit({ units: 60_001 })
   await assert.rejects(adapter.reconcile({ signature, transaction }), { code: 'TRANSACTION_MISMATCH' })
 })
 

@@ -3,6 +3,7 @@ import {
   ComputeBudgetProgram,
   Connection,
   Keypair,
+  Message,
   PublicKey,
   SystemProgram,
   Transaction,
@@ -19,6 +20,7 @@ import {
   getMint,
 } from '@solana/spl-token'
 import BN from 'bn.js'
+import bs58 from 'bs58'
 import {
   ActivationType,
   BaseFeeMode,
@@ -77,6 +79,54 @@ import {
   validateMetadata,
   validateSlippage,
 } from './validation.js'
+
+const MAX_PRIORITY_FEE_MICROLAMPORTS = 100_000n
+
+function boundTransactionMessage(actual: { serialize(): Uint8Array }, expectedBase64: string) {
+  const actualBase64 = Buffer.from(actual.serialize()).toString('base64')
+  if (actualBase64 === expectedBase64) return true
+  // Seeker's built-in wallet may replace the compute-unit price when it signs.
+  // Permit only that bounded fee field; all accounts, other instruction bytes,
+  // the payer and the blockhash remain bound to the persisted intent.
+  if (!(actual instanceof Message)) return false
+  let expected: Message
+  try {
+    expected = Message.from(Buffer.from(expectedBase64, 'base64'))
+  } catch {
+    return false
+  }
+  if (
+    actual.recentBlockhash !== expected.recentBlockhash ||
+    actual.header.numRequiredSignatures !== expected.header.numRequiredSignatures ||
+    actual.header.numReadonlySignedAccounts !== expected.header.numReadonlySignedAccounts ||
+    actual.header.numReadonlyUnsignedAccounts !== expected.header.numReadonlyUnsignedAccounts ||
+    actual.accountKeys.length !== expected.accountKeys.length ||
+    actual.instructions.length !== expected.instructions.length ||
+    actual.accountKeys.some((address, index) => !address.equals(expected.accountKeys[index]))
+  )
+    return false
+  return actual.instructions.every((instruction, index) => {
+    const persisted = expected.instructions[index]
+    if (
+      !persisted ||
+      instruction.programIdIndex !== persisted.programIdIndex ||
+      instruction.accounts.length !== persisted.accounts.length ||
+      instruction.accounts.some((account, accountIndex) => account !== persisted.accounts[accountIndex])
+    )
+      return false
+    if (instruction.data === persisted.data) return true
+    if (!actual.accountKeys[instruction.programIdIndex]?.equals(ComputeBudgetProgram.programId)) return false
+    const signedData = Buffer.from(bs58.decode(instruction.data))
+    const persistedData = Buffer.from(bs58.decode(persisted.data))
+    return (
+      signedData.length === 9 &&
+      persistedData.length === 9 &&
+      signedData[0] === 3 &&
+      persistedData[0] === 3 &&
+      signedData.readBigUInt64LE(1) <= MAX_PRIORITY_FEE_MICROLAMPORTS
+    )
+  })
+}
 
 function key(value: string): PublicKey {
   try {
@@ -798,9 +848,7 @@ export class MeteoraMarketAdapter implements MarketAdapter {
       const height = await this.connection.getBlockHeight('confirmed')
       return { status: height > transaction.lastValidBlockHeight ? 'expired' : 'pending', signature }
     }
-    if (
-      Buffer.from(result.transaction.message.serialize()).toString('base64') !== transaction.messageBase64
-    ) {
+    if (!boundTransactionMessage(result.transaction.message, transaction.messageBase64)) {
       throw new MarketError(
         'TRANSACTION_MISMATCH',
         'Signature does not belong to the transaction built for this intent.',
