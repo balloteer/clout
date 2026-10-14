@@ -15,6 +15,7 @@ import { FaucetService } from './faucet.js'
 import { parseTrustProxyHops } from './request-ip.js'
 import { parseAndroidAppIdentity } from './app-identity.js'
 import { resolveAllowedOrigins, resolveOrigin, resolveTrustProxyHops } from './runtime-config.js'
+import { SkrIdentityResolver } from './identity.js'
 
 const env = process.env
 const connected = env.CLOUT_MODE === 'connected'
@@ -111,7 +112,16 @@ const chain = tradingConfigured
       fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(15000) }),
     })
   : undefined
-// This alpha never reads mainnet, including identity/SGT verification.
+const identity = env.SOLANA_MAINNET_IDENTITY_RPC_URL
+  ? new SkrIdentityResolver(
+      new Connection(env.SOLANA_MAINNET_IDENTITY_RPC_URL, {
+        commitment: 'confirmed',
+        disableRetryOnRateLimit: true,
+        fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(15000) }),
+      }),
+    )
+  : undefined
+// Transactions remain devnet-only. The optional mainnet client performs read-only .skr lookups.
 if (env.REWARDS_ENABLED === 'true')
   throw new Error('SGT rewards are unavailable in the devnet-only alpha. Use the bounded mock SKR faucet.')
 let faucet: FaucetService | undefined
@@ -292,6 +302,7 @@ const { server } = createApp({
   quoteMint: tradingConfigured ? env.SKR_DEVNET_MINT : undefined,
   quoteDecimals: Number(env.SKR_DECIMALS ?? 6),
   chain,
+  identity,
   maintenance: connected ? runMaintenance : undefined,
   maintenanceSecret: env.MAINTENANCE_SECRET,
 })

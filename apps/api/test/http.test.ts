@@ -52,7 +52,12 @@ async function fixture(
         signature: sign(null, Buffer.from(challenge.message), privateKey).toString('base64'),
       }),
     })
-    return { wallet, token: data.token as string, headers: { Authorization: `Bearer ${data.token}` } }
+    return {
+      wallet,
+      token: data.token as string,
+      profile: data.profile,
+      headers: { Authorization: `Bearer ${data.token}` },
+    }
   }
   return {
     url,
@@ -248,6 +253,64 @@ test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logou
     assert.deepEqual(portfolio.data.positions, [])
     await app.request('/v1/auth/logout', { method: 'POST', headers: login.headers })
     assert.equal((await app.request('/v1/me', { headers: login.headers })).status, 401)
+  } finally {
+    await app.close()
+  }
+})
+
+test('.skr names replace wallet-derived handles across identity surfaces', async () => {
+  let lookups = 0
+  const app = await fixture(undefined, async () => ({
+    identity: {
+      names: async () => {
+        lookups++
+        return ['vcnzoct.skr']
+      },
+    },
+  }))
+  try {
+    assert.equal((await app.request('/v1/config')).data.features.skrNames, true)
+    const login = await app.login()
+    assert.equal(login.profile.handle, 'vcnzoct.skr')
+
+    const post = app.repository.posts.values().next().value!
+    post.creatorWallet = login.wallet
+    const me = await app.request('/v1/me', { headers: login.headers })
+    assert.equal(me.data.profile.handle, 'vcnzoct.skr')
+    assert.equal((await app.request('/v1/feed')).data.posts[0].creator.handle, 'vcnzoct.skr')
+    assert.equal(
+      (await app.request('/v1/discover')).data.creators.find(
+        (profile: { wallet: string }) => profile.wallet === login.wallet,
+      ).handle,
+      'vcnzoct.skr',
+    )
+    assert.equal((await app.request(`/v1/profiles/${login.wallet}`)).data.profile.handle, 'vcnzoct.skr')
+
+    const comments = await app.request(`/v1/posts/${post.id}/comments`, {
+      method: 'POST',
+      headers: login.headers,
+      body: JSON.stringify({ body: 'Named by my Seeker wallet.' }),
+    })
+    assert.equal(comments.data.comments[0].creator.handle, 'vcnzoct.skr')
+    assert.equal((await app.repository.getProfile(login.wallet))!.handle, 'vcnzoct.skr')
+    assert.equal(lookups, 1)
+  } finally {
+    await app.close()
+  }
+})
+
+test('identity lookup failure never blocks wallet authentication', async () => {
+  const app = await fixture(undefined, async () => ({
+    identity: {
+      names: async () => {
+        throw new Error('identity rpc unavailable')
+      },
+    },
+  }))
+  try {
+    const login = await app.login()
+    assert.equal(login.profile.handle, `${login.wallet.slice(0, 4)}…${login.wallet.slice(-4)}`)
+    assert.equal((await app.request('/v1/me', { headers: login.headers })).status, 200)
   } finally {
     await app.close()
   }

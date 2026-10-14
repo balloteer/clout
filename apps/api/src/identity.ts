@@ -14,13 +14,22 @@ export interface IdentityResolver {
 /** Reverse display names only. Payment destinations continue to require the wallet address. */
 export class SkrIdentityResolver implements IdentityResolver {
   private cache = new Map<string, { expires: number; names: string[] }>()
+  private mainnetCheck?: Promise<void>
   constructor(private connection: Connection) {}
   async names(wallet: string) {
+    const owner = new PublicKey(wallet)
     const cached = this.cache.get(wallet)
     if (cached && cached.expires > Date.now()) return [...cached.names]
-    if ((await this.connection.getGenesisHash()) !== '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d')
-      throw new Error('Names require mainnet.')
-    const owner = new PublicKey(wallet)
+    this.mainnetCheck ??= this.connection.getGenesisHash().then((genesis) => {
+      if (genesis !== '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d')
+        throw new Error('Names require mainnet.')
+    })
+    try {
+      await this.mainnetCheck
+    } catch (error) {
+      this.mainnetCheck = undefined
+      throw error
+    }
     const parent = PublicKey.findProgramAddressSync([hashName('.skr'), ZERO, ROOT.toBuffer()], ANS)[0]
     const tldHouse = PublicKey.findProgramAddressSync(
       [Buffer.from('tld_house'), Buffer.from('.skr')],

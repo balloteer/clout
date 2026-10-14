@@ -8,7 +8,7 @@ Clout runs only on Solana devnet. The user-funded isolated wallet provisioned a 
 - Complete launch receipts: ignored `artifacts/devnet-sample-markets.json`; public addresses/signatures also live in the shared source registry.
 - Task keys and exact signed transaction journals: ignored `.tooling/devnet/`, with private file permissions. No user wallet file is read.
 
-The app's sidebar, mobile menu and Profile expose **Mint mock SKR**. This faucet uses the same configured mint as post markets. It grants 1,000 mock SKR per authenticated wallet per UTC day, resetting at 00:00 UTC. Database reservations enforce the daily limit, including concurrent requests and restarts. The default operational limits are 10,000 wallet allocations per day and an absolute one-billion mock-SKR supply ceiling. Grants are persisted before broadcast and displayed as received only after finalization. Unknown expired signatures stop for review. Mainnet SGT rewards and identity services are unavailable in this alpha.
+The app's sidebar, mobile menu and Profile expose **Mint mock SKR**. This faucet uses the same configured mint as post markets. It grants 1,000 mock SKR per authenticated wallet per UTC day, resetting at 00:00 UTC. Database reservations enforce the daily limit, including concurrent requests and restarts. The default operational limits are 10,000 wallet allocations per day and an absolute one-billion mock-SKR supply ceiling. Grants are persisted before broadcast and displayed as received only after finalization. Unknown expired signatures stop for review. Mainnet SGT rewards are unavailable. Optional `.skr` profile-name resolution is a read-only mainnet identity lookup and has no transaction authority.
 
 ## Connect persistent services
 

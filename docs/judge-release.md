@@ -17,6 +17,7 @@ The judge APK points at a public HTTPS API. Vercel builds the repository's `Dock
 CLOUT_MODE=connected
 DATABASE_URL=<sealed Supabase server pooler URL>
 SOLANA_DEVNET_RPC_URL=<sealed devnet RPC URL>
+SOLANA_MAINNET_IDENTITY_RPC_URL=https://api.mainnet-beta.solana.com
 SKR_DEVNET_MINT=8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC
 SKR_DECIMALS=6
 METEORA_DBC_CONFIG=<devnet DBC configuration address>
@@ -25,7 +26,7 @@ REWARDS_ENABLED=false
 MAINTENANCE_SECRET=<one stable 64-character hexadecimal secret>
 ```
 
-Generate `MAINTENANCE_SECRET` once with `openssl rand -hex 32`. Store the exact same value in Vercel and the Cloudflare recovery Worker. Set `DATABASE_URL`, `SOLANA_DEVNET_RPC_URL`, `MAINTENANCE_SECRET` and `FAUCET_MINT_AUTHORITY_SECRET_BASE64` to the **Secret** type. `DATABASE_URL` must use the Supabase server-side session/shared pooler on port 5432, with special characters in the password percent-encoded. The API uses a bounded connection pool and the pinned public Supabase CA.
+Generate `MAINTENANCE_SECRET` once with `openssl rand -hex 32`. Store the exact same value in Vercel and the Cloudflare recovery Worker. Set `DATABASE_URL`, `SOLANA_DEVNET_RPC_URL`, `MAINTENANCE_SECRET` and `FAUCET_MINT_AUTHORITY_SECRET_BASE64` to the **Secret** type. `SOLANA_MAINNET_IDENTITY_RPC_URL` may be a plain configuration value because the public endpoint shown above has no credential; it is used only for read-only `.skr` names. `DATABASE_URL` must use the Supabase server-side session/shared pooler on port 5432, with special characters in the password percent-encoded. The API uses a bounded connection pool and the pinned public Supabase CA.
 
 Apply `supabase/migrations/20261013090000_upload_recovery_checks.sql` before enabling the recovery Worker. The safe helper is `node --env-file=apps/api/.env.local scripts/db-upload-recovery.mjs --apply`; it pins the existing Supabase project and verifies the private grants afterward. Also apply `supabase/migrations/20261014034917_supabase_video_storage.sql`; it creates the restricted private staging bucket and public playback bucket. The recovery table rotates checks across pending uploads.
 

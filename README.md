@@ -29,7 +29,7 @@ For a reproducible isolated Android toolchain, APK builds, and emulator setup, s
 
 - Five primary screens plus a Mint mock SKR screen accessible from the sidebar, phone menu and Profile, using the supplied Clout logos, Titan One and DM Sans fonts, pink/lime/ink palette, and exact slogan.
 - Vertical TikTok-style paging with one active video player in a Seeker-proportioned 40:89 frame, a fixed eye investment button above Like, safe-area overlays, native background/dialog pause, playback retry, and current-post/filter restoration across tabs. Create keeps its publish action visible; Discover keeps search and filters pinned. See the [Seeker layout review](docs/mobile-layout.md). Sample discussion, bookmark persistence, creator follows, and direct video upload UI.
-- Seeker-only wallet routing on Android and web, challenge signature verification, single-use nonces, hashed server sessions, secure mobile session storage. Runtime services are devnet-only; mainnet `.skr`/SGT services are disabled in this alpha.
+- Seeker-only wallet routing on Android and web, challenge signature verification, single-use nonces, hashed server sessions, secure mobile session storage, and `.skr` profile names. Transactions remain devnet-only; the API uses an isolated read-only mainnet connection solely to resolve `.skr` names. SGT services remain disabled.
 - SKR-quoted Meteora DBC and DAMM v2 adapters: launch, quote, buy, sell, fees, explicit migration steps, checked SKR tips, devnet validation, simulation, and message-bound confirmation.
 - Signed transaction recovery persisted **before** broadcast, one pending transaction per wallet, duplicate-intent guards, and background reconciliation of submitted API intents.
 - Real wallet holdings, amount backed, current sell value and total return when connected. Investments lead Collection and appear directly on Profile; sale presets cannot exceed the held post tokens.
@@ -45,7 +45,7 @@ The two integration guides describe the API and chain configuration: [backend](d
 
 This implementation deliberately executes transactions on **devnet only**. Mainnet SKR is the existing token `SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3`; the provisioned mock mint is `8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC`. The app labels this **Test SKR**. A test mint has no mainnet SKR value. Mainnet transactions and authority changes require a separate explicit approval.
 
-No treasury secrets or production service keys are committed. This alpha makes no mainnet identity or token reads. Public sample-token metadata is hosted at [Clout devnet catalog](https://clout-devnet-catalog.vercel.app); the app/API have not been deployed there.
+No treasury secrets or production service keys are committed. The only mainnet access is read-only `.skr` name resolution; token balances, markets, faucet mints and every transaction remain on devnet. Public sample-token metadata is hosted at [Clout devnet catalog](https://clout-devnet-catalog.vercel.app); the app/API have not been deployed there.
 
 ## Checks
 

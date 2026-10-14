@@ -15,6 +15,7 @@ import {
   newProfile,
   type Post,
   type PostSummary,
+  type Profile,
   type Repository,
   type TransactionIntent,
 } from './domain.js'
@@ -105,6 +106,35 @@ export function createApp(options: AppOptions) {
     quoteMint: options.quoteMint,
     decimals: options.quoteDecimals ?? 6,
   })
+  const identityLookups = new Map<string, Promise<string | undefined>>()
+  const identityHandle = async (wallet: string) => {
+    if (!options.identity) return undefined
+    try {
+      new PublicKey(wallet)
+    } catch {
+      return undefined
+    }
+    let lookup = identityLookups.get(wallet)
+    if (!lookup) {
+      lookup = options.identity
+        .names(wallet)
+        .then((names) => names[0] ?? newProfile(wallet).handle)
+        .catch(() => undefined)
+        .finally(() => identityLookups.delete(wallet))
+      identityLookups.set(wallet, lookup)
+    }
+    return lookup
+  }
+  const presentProfile = async (profile: Profile | null) => {
+    if (!profile) return null
+    // Preserve intentional editorial handles and reuse a persisted .skr handle.
+    if (profile.handle !== newProfile(profile.wallet).handle) return profile
+    const handle = await identityHandle(profile.wallet)
+    if (!handle || handle === profile.handle) return profile
+    const resolved = { ...profile, handle }
+    await repository.saveProfile(resolved)
+    return resolved
+  }
   let readinessPromise: Promise<boolean> | undefined
   let readinessValue = false
   let readinessExpiresAt = 0
@@ -183,7 +213,9 @@ export function createApp(options: AppOptions) {
       post.thumbnailUrl?.startsWith('/v1/samples/media/') || post.thumbnailUrl?.startsWith('/v1/local-media/')
         ? new URL(post.thumbnailUrl, options.origin).toString()
         : rebaseLoopbackSampleMedia(post.thumbnailUrl, options.origin),
-    creator: summary ? summary.creator : await repository.getProfile(post.creatorWallet),
+    creator: await presentProfile(
+      summary ? summary.creator : await repository.getProfile(post.creatorWallet),
+    ),
     likes: summary ? summary.likes : await repository.likes(post.id, wallet),
     commentCount: summary ? summary.commentCount : (await repository.listComments(post.id)).length,
   })
@@ -317,6 +349,7 @@ export function createApp(options: AppOptions) {
             rewards: !!options.rewards,
             linkedAccounts: !!options.linkedAccounts,
             faucet: !!options.faucet,
+            skrNames: !!options.identity,
           },
         })
         return
@@ -327,15 +360,7 @@ export function createApp(options: AppOptions) {
       }
       if (method === 'POST' && route === '/v1/auth/verify') {
         const result = await auth.verify(await body())
-        if (options.identity) {
-          try {
-            const names = await options.identity.names(result.profile.wallet)
-            result.profile.handle = names[0] ?? newProfile(result.profile.wallet).handle
-            await repository.saveProfile(result.profile)
-          } catch {
-            /* Wallet authentication remains usable when identity RPC is unavailable. */
-          }
-        }
+        result.profile = (await presentProfile(result.profile))!
         send(200, result)
         return
       }
@@ -470,7 +495,7 @@ export function createApp(options: AppOptions) {
       if (method === 'GET' && route === '/v1/me') {
         const wallet = requireWallet()
         send(200, {
-          profile: await repository.ensureProfile(wallet),
+          profile: await presentProfile(await repository.ensureProfile(wallet)),
           following: await repository.following(wallet),
         })
         return
@@ -500,7 +525,10 @@ export function createApp(options: AppOptions) {
               ),
             ),
           ),
-          creators: route === '/v1/discover' ? await repository.listProfiles() : undefined,
+          creators:
+            route === '/v1/discover'
+              ? await Promise.all((await repository.listProfiles()).map(presentProfile))
+              : undefined,
           following: session ? await repository.following(session.wallet) : [],
           mode: options.mode,
         })
@@ -516,7 +544,7 @@ export function createApp(options: AppOptions) {
         const profile = await repository.getProfile(profileMatch[1])
         if (!profile) throw new ApiError(404, 'PROFILE_NOT_FOUND', 'Profile not found.')
         send(200, {
-          profile,
+          profile: await presentProfile(profile),
           posts: await Promise.all(
             (session?.wallet === profile.wallet
               ? await repository.listOwnPosts(profile.wallet)
@@ -538,7 +566,7 @@ export function createApp(options: AppOptions) {
         }
         // handle and Seeker verification are never user editable.
         await repository.saveProfile(profile)
-        send(200, { profile })
+        send(200, { profile: await presentProfile(profile) })
         return
       }
       const commentsMatch = route.match(/^\/v1\/posts\/([^/]+)\/comments$/)
@@ -559,7 +587,7 @@ export function createApp(options: AppOptions) {
           comments: await Promise.all(
             comments.map(async (comment) => ({
               ...comment,
-              creator: await repository.getProfile(comment.wallet),
+              creator: await presentProfile(await repository.getProfile(comment.wallet)),
               earlyBacker: (await repository.getEvents(comment.wallet)).some(
                 (event) => event.postId === post.id && event.kind === 'buy' && event.finality === 'finalized',
               ),

@@ -22,7 +22,7 @@ Disconnecting USB prevents API-backed login, trading and faucet requests. A port
 
 ## Limits
 
-Local package/signature verification restricts the native app's supported wallet route. A signed Solana message proves address ownership to the API; it does not provide server-verifiable device or wallet-application attestation. A separately written API client can still authenticate its own valid signature. No mainnet SGT or `.skr` lookup is enabled, and these checks do not label a wallet as Seeker-verified.
+Local package/signature verification restricts the native app's supported wallet route. A signed Solana message proves address ownership to the API; it does not provide server-verifiable device or wallet-application attestation. A separately written API client can still authenticate its own valid signature. The API can resolve the authenticated address to a display-only `.skr` name over a read-only mainnet connection. This lookup does not verify a Seeker device, change the authenticated wallet, or authorize a transaction. Mainnet SGT checks remain disabled.
 
 Browser Seeker Connect uses `relay.solanamobile.com`; the developer must accept [the relay terms](https://docs.solanamobile.com/solana-mobile-stack/seeker-connect-quickstart) before using it. The native APK does not use that relay.
 
