@@ -23,7 +23,7 @@ To connect the app to the API, copy `apps/mobile/.env.example` to `apps/mobile/.
 npm run android
 ```
 
-For a reproducible isolated Android toolchain, APK builds, and emulator setup, see [docs/android.md](docs/android.md). Device access to a local API requires `adb reverse tcp:8787 tcp:8787` over USB or a reachable HTTPS API URL.
+For a reproducible isolated Android toolchain, APK builds, and emulator setup, see [docs/android.md](docs/android.md). Device access to a local API requires `adb reverse tcp:8787 tcp:8787` over USB or a reachable HTTPS API URL. The [judge release runbook](docs/judge-release.md) covers the credential-free container, Railway settings, hosted environment contract and portable APK acceptance.
 
 ## What is implemented
 
