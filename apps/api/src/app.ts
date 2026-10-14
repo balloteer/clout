@@ -125,13 +125,21 @@ export function createApp(options: AppOptions) {
     }
     return lookup
   }
+  const profileHandle = (handle: string) =>
+    handle.toLowerCase().endsWith('.skr') ? handle.slice(0, -4) : handle
   const presentProfile = async (profile: Profile | null) => {
     if (!profile) return null
-    // Preserve intentional editorial handles and reuse a persisted .skr handle.
+    const storedHandle = profileHandle(profile.handle)
+    if (storedHandle !== profile.handle) {
+      const resolved = { ...profile, handle: storedHandle }
+      await repository.saveProfile(resolved)
+      return resolved
+    }
+    // Preserve intentional editorial handles and reuse a persisted Seeker name.
     if (profile.handle !== newProfile(profile.wallet).handle) return profile
     const handle = await identityHandle(profile.wallet)
     if (!handle || handle === profile.handle) return profile
-    const resolved = { ...profile, handle }
+    const resolved = { ...profile, handle: profileHandle(handle) }
     await repository.saveProfile(resolved)
     return resolved
   }

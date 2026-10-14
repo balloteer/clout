@@ -12,6 +12,7 @@ import { WalletContext } from './wallet-context'
 import { API_URL, api, postJson, setSessionToken, onSessionInvalidated } from './api'
 import { getPending } from './transactions'
 import { persistThenBroadcast } from './submission'
+import { profileName } from './profile-name'
 import {
   SEEKER_STORAGE_KEY,
   signedMessageParts,
@@ -113,7 +114,7 @@ export function SeekerWalletProvider({
           if (!active || generation.current !== revision) return
           const refreshedSession: Session = {
             ...restoredSession,
-            profile: { name: profile.handle, seeker: profile.seekerVerified },
+            profile: { name: profileName(profile.handle), seeker: profile.seekerVerified },
           }
           if (
             refreshedSession.profile.name === restoredSession.profile.name &&
@@ -233,7 +234,7 @@ export function SeekerWalletProvider({
         nextSession = {
           token: result.token,
           expiresAt: result.expiresAt,
-          profile: { name: result.profile.handle, seeker: result.profile.seekerVerified },
+          profile: { name: profileName(result.profile.handle), seeker: result.profile.seekerVerified },
         }
       } else auth = validate(await transport.authorize(current.current?.authorization))
       await remember(auth, nextSession)

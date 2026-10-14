@@ -30,6 +30,7 @@ import {
 import { Avatar, Badge, Button, Icon, Txt } from './ui'
 import { InvestmentChart } from './investment-chart'
 import type { ApiProfile, Portfolio } from '../lib/contracts'
+import { profileName } from '../lib/profile-name'
 type Quote = {
   id: string
   expectedAmountOut: string
@@ -749,10 +750,11 @@ type ApiComment = {
 }
 function presentComment(item: ApiComment) {
   const address = `${item.wallet.slice(0, 4)}…${item.wallet.slice(-4)}`
+  const handle = profileName(item.creator?.handle)
   return {
     id: item.id,
-    name: item.creator?.handle ?? address,
-    address: item.creator?.handle ? '' : address,
+    name: handle ?? address,
+    address: handle ? '' : address,
     text: item.body,
     backer: item.earlyBacker === true,
   }

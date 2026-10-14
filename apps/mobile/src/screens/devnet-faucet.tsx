@@ -3,6 +3,7 @@ import { AppState, Linking, RefreshControl, ScrollView, StyleSheet, View } from 
 import { api, API_URL, postJson } from '../lib/api'
 import { displayAtomic } from '../lib/amounts'
 import { useWallet } from '../lib/wallet'
+import { profileName } from '../lib/profile-name'
 import { colors as c } from '../lib/theme'
 import { Badge, Button, Icon, Txt } from '../components/ui'
 
@@ -200,7 +201,7 @@ function WalletFaucet({ onConnect }: { onConnect: () => void }) {
           <View style={{ gap: 4 }}>
             <Txt style={s.small}>Receiving Seeker wallet</Txt>
             <Txt selectable numberOfLines={1} ellipsizeMode="middle" style={s.address}>
-              {wallet.name ?? wallet.address}
+              {profileName(wallet.name) ?? wallet.address}
             </Txt>
           </View>
         )}

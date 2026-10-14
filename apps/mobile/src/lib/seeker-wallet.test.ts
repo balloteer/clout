@@ -10,6 +10,7 @@ import { AuthService } from '../../../api/src/auth'
 import { MemoryRepository } from '../../../api/src/memory'
 import type { WalletState } from './wallet-context'
 import * as policy from './seeker-wallet-policy'
+import { profileName } from './profile-name'
 import type { SeekerTransport } from './seeker-wallet-provider'
 
 const address = '11111111111111111111111111111111'
@@ -175,6 +176,7 @@ function transportHarness(platform: 'native' | 'web', options: HarnessOptions = 
         }
       if (name === '@solana/kit') return kit
       if (name === './seeker-wallet-policy') return policy
+      if (name === './profile-name') return { profileName }
       if (name === '@solana-mobile/mobile-wallet-adapter-protocol-kit')
         return {
           transact: async (callback: (wallet: typeof fakeWallet) => unknown, config: unknown) => {
@@ -375,6 +377,7 @@ function providerHarness(
       if (name === 'react/jsx-runtime') return { jsx: (_type: unknown, props: unknown) => ({ props }) }
       if (name === '@solana/kit') return kit
       if (name === './seeker-wallet-policy') return policy
+      if (name === './profile-name') return { profileName }
       if (name === './wallet-context') return { WalletContext: { Provider: {} } }
       if (name === './api')
         return {

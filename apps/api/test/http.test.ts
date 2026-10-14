@@ -258,7 +258,7 @@ test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logou
   }
 })
 
-test('.skr names replace wallet-derived handles across identity surfaces', async () => {
+test('.skr names replace wallet-derived handles without showing the shared suffix', async () => {
   let lookups = 0
   const app = await fixture(undefined, async () => ({
     identity: {
@@ -271,28 +271,28 @@ test('.skr names replace wallet-derived handles across identity surfaces', async
   try {
     assert.equal((await app.request('/v1/config')).data.features.skrNames, true)
     const login = await app.login()
-    assert.equal(login.profile.handle, 'vcnzoct.skr')
+    assert.equal(login.profile.handle, 'vcnzoct')
 
     const post = app.repository.posts.values().next().value!
     post.creatorWallet = login.wallet
     const me = await app.request('/v1/me', { headers: login.headers })
-    assert.equal(me.data.profile.handle, 'vcnzoct.skr')
-    assert.equal((await app.request('/v1/feed')).data.posts[0].creator.handle, 'vcnzoct.skr')
+    assert.equal(me.data.profile.handle, 'vcnzoct')
+    assert.equal((await app.request('/v1/feed')).data.posts[0].creator.handle, 'vcnzoct')
     assert.equal(
       (await app.request('/v1/discover')).data.creators.find(
         (profile: { wallet: string }) => profile.wallet === login.wallet,
       ).handle,
-      'vcnzoct.skr',
+      'vcnzoct',
     )
-    assert.equal((await app.request(`/v1/profiles/${login.wallet}`)).data.profile.handle, 'vcnzoct.skr')
+    assert.equal((await app.request(`/v1/profiles/${login.wallet}`)).data.profile.handle, 'vcnzoct')
 
     const comments = await app.request(`/v1/posts/${post.id}/comments`, {
       method: 'POST',
       headers: login.headers,
       body: JSON.stringify({ body: 'Named by my Seeker wallet.' }),
     })
-    assert.equal(comments.data.comments[0].creator.handle, 'vcnzoct.skr')
-    assert.equal((await app.repository.getProfile(login.wallet))!.handle, 'vcnzoct.skr')
+    assert.equal(comments.data.comments[0].creator.handle, 'vcnzoct')
+    assert.equal((await app.repository.getProfile(login.wallet))!.handle, 'vcnzoct')
     assert.equal(lookups, 1)
   } finally {
     await app.close()

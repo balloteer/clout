@@ -12,6 +12,7 @@ import { Avatar, Badge, Button, Icon, Section, Txt } from '../components/ui'
 import { CreatorPost, TipForm } from '../components/creator-actions'
 import { RewardPanel } from '../components/reward-panel'
 import { LinkedAccounts } from '../components/linked-accounts'
+import { profileName } from '../lib/profile-name'
 
 type ProfileResponse = { profile: ApiProfile; posts: ApiPost[] }
 type AppConfig = {
@@ -186,8 +187,8 @@ function WalletProfile({ onConnect, onFaucet, onPost, portfolioRevision = 0 }: P
         </Badge>
       </View>
       <Txt display style={s.name}>
-        {profile?.handle ??
-          wallet.name ??
+        {profileName(profile?.handle) ??
+          profileName(wallet.name) ??
           (wallet.address
             ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
             : 'Your clout starts here.')}

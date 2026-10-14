@@ -1,4 +1,5 @@
 import { allCatalogPosts, type Post } from './data'
+import { profileName } from './profile-name'
 export type ApiProfile = { wallet: string; handle: string; displayName: string; seekerVerified: boolean }
 export type ApiPost = {
   id: string
@@ -29,7 +30,7 @@ export function mapPost(post: ApiPost, index = 0): Post {
     creatorWallet: post.creatorWallet,
     creator:
       bundled?.creator ??
-      post.creator?.handle ??
+      profileName(post.creator?.handle) ??
       `${post.creatorWallet.slice(0, 4)}…${post.creatorWallet.slice(-4)}`,
     avatar: bundled?.avatar ?? post.creator?.displayName?.slice(0, 1) ?? 'S',
     caption: post.caption,

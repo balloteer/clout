@@ -21,8 +21,13 @@ function mapper(preview: Post[]) {
     exports: exported,
     module: { exports: exported },
     require: (name: string) => {
-      assert.equal(name, './data')
-      return { allCatalogPosts: preview }
+      if (name === './data') return { allCatalogPosts: preview }
+      if (name === './profile-name')
+        return {
+          profileName: (handle?: string) =>
+            handle?.toLowerCase().endsWith('.skr') ? handle.slice(0, -4) : handle,
+        }
+      throw new Error(`Unexpected dependency: ${name}`)
     },
   })
   return exported.mapPost as (post: ApiPost) => Post
