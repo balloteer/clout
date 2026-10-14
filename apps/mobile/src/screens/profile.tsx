@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { useWallet } from '../lib/wallet'
 import { useApp } from '../lib/store'
 import { api, API_URL, postJson } from '../lib/api'
-import { displayAtomic } from '../lib/amounts'
-import type { ApiPost, ApiProfile, Portfolio } from '../lib/contracts'
+import { displayAtomic, displayBps, displaySignedAtomic } from '../lib/amounts'
+import { mapPost, type ApiPost, type ApiProfile, type Portfolio } from '../lib/contracts'
 import { confirmPending, getPending, type PendingTransaction } from '../lib/transactions'
-import { mediaCredits } from '../lib/data'
+import { imageSource, mediaCredits, type Post } from '../lib/data'
 import { colors as c, SLOGAN } from '../lib/theme'
 import { Avatar, Badge, Button, Icon, Section, Txt } from '../components/ui'
 import { CreatorPost, TipForm } from '../components/creator-actions'
@@ -19,14 +19,27 @@ type AppConfig = {
   features: { trading: boolean; rewards: boolean; seekerVerification: boolean }
 }
 
-type ProfileProps = { onConnect: () => void; onFaucet?: () => void }
-
-export function Profile({ onConnect, onFaucet }: ProfileProps) {
-  const wallet = useWallet()
-  return <WalletProfile key={wallet.address ?? 'guest'} onConnect={onConnect} onFaucet={onFaucet} />
+type ProfileProps = {
+  onConnect: () => void
+  onFaucet?: () => void
+  onPost: (post: Post, side?: 'buy' | 'sell') => void
+  portfolioRevision?: number
 }
 
-function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
+export function Profile({ onConnect, onFaucet, onPost, portfolioRevision }: ProfileProps) {
+  const wallet = useWallet()
+  return (
+    <WalletProfile
+      key={wallet.address ?? 'guest'}
+      onConnect={onConnect}
+      onFaucet={onFaucet}
+      onPost={onPost}
+      portfolioRevision={portfolioRevision}
+    />
+  )
+}
+
+function WalletProfile({ onConnect, onFaucet, onPost, portfolioRevision = 0 }: ProfileProps) {
   const wallet = useWallet()
   const { saved, following, notify, refresh: refreshFeed } = useApp()
   const [profile, setProfile] = useState<ApiProfile | null>(null)
@@ -91,6 +104,7 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
     setLoading(false)
   }, [wallet.address])
   useEffect(() => {
+    void portfolioRevision
     let active = true
     const requests = generation
     const refreshVisible = () => {
@@ -105,7 +119,7 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
       requests.current++
       subscription.remove()
     }
-  }, [load])
+  }, [load, portfolioRevision])
   async function refresh() {
     if (!wallet.address) return
     await load()
@@ -163,13 +177,6 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
         <RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={c.lime} />
       }
     >
-      <View style={s.cover}>
-        <View style={s.orbit} />
-        <Txt display style={s.coverText}>
-          Taste is{'\n'}a superpower.
-        </Txt>
-        <Icon name="sparkles" color={c.ink} size={42} />
-      </View>
       <View style={s.identity}>
         <Avatar letter={profile?.displayName ?? (wallet.address ? 'S' : '?')} size={78} color={c.cream} />
         <Badge color={verified ? c.lime : c.surface}>
@@ -281,6 +288,80 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
           </View>
         ))}
       </View>
+      {wallet.address && (
+        <Section
+          title="Your investments"
+          aside={<Txt style={s.small}>{portfolio?.positions.length ?? 0} positions</Txt>}
+        >
+          {portfolio?.positions.length ? (
+            <View style={{ gap: 10 }}>
+              {portfolio.positions.map((position, index) => {
+                const post = mapPost(position.post, index)
+                const positive =
+                  position.profitLossQuoteAmount !== null && BigInt(position.profitLossQuoteAmount) >= 0n
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open investment in ${post.caption}`}
+                    key={post.id}
+                    onPress={() => onPost(post, 'sell')}
+                    style={s.investment}
+                  >
+                    <Image source={imageSource(post.poster)} style={s.investmentImage} />
+                    <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                      <Txt style={{ fontWeight: '700' }} numberOfLines={1}>
+                        {post.caption}
+                      </Txt>
+                      <Txt style={s.small}>
+                        {position.backingAvailable
+                          ? `${displayAtomic(position.boughtQuoteAmount, balance?.decimals ?? 6)} SKR backed`
+                          : 'Recorded backing unavailable'}
+                      </Txt>
+                      <Txt style={{ color: c.cream, fontSize: 12 }}>
+                        {position.sellQuote
+                          ? `${displayAtomic(position.sellQuote.expectedAmountOut, position.sellQuote.outputDecimals)} SKR now`
+                          : 'Current value unavailable'}
+                      </Txt>
+                    </View>
+                    <View style={s.investmentReturn}>
+                      <Txt
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        style={{
+                          color: position.performanceAvailable ? (positive ? c.lime : c.orange) : c.muted,
+                          fontWeight: '700',
+                          fontSize: 12,
+                        }}
+                      >
+                        {position.performanceAvailable && position.profitLossQuoteAmount
+                          ? `${displaySignedAtomic(position.profitLossQuoteAmount, balance?.decimals ?? 6)} SKR`
+                          : '—'}
+                      </Txt>
+                      <Txt
+                        numberOfLines={2}
+                        style={{
+                          color: position.performanceAvailable ? (positive ? c.lime : c.orange) : c.muted,
+                          fontSize: 11,
+                          textAlign: 'right',
+                        }}
+                      >
+                        {position.performanceAvailable && position.returnBps
+                          ? displayBps(position.returnBps)
+                          : 'Return unavailable'}
+                      </Txt>
+                    </View>
+                    <Icon name="chevron-forward" color={c.muted} size={18} />
+                  </Pressable>
+                )
+              })}
+            </View>
+          ) : (
+            <Txt style={s.small}>
+              {loading ? 'Checking your wallet…' : 'Your backed posts will appear here.'}
+            </Txt>
+          )}
+        </Section>
+      )}
       <LinkedAccounts onConnect={onConnect} />
       {config?.features.seekerVerification ? (
         <Section title="A little Seeker perk">
@@ -390,45 +471,13 @@ function WalletProfile({ onConnect, onFaucet }: ProfileProps) {
 
 const s = StyleSheet.create({
   content: { padding: 24, paddingTop: 30, maxWidth: 700, width: '100%', alignSelf: 'center' },
-  cover: {
-    minHeight: 175,
-    backgroundColor: c.pink,
-    borderRadius: 24,
-    overflow: 'hidden',
-    padding: 25,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  coverText: {
-    fontSize: 33,
-    lineHeight: 41,
-    color: c.ink,
-    flexBasis: 220,
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  orbit: {
-    position: 'absolute',
-    width: 270,
-    height: 270,
-    borderWidth: 1,
-    borderColor: 'rgba(21,18,28,.2)',
-    borderRadius: 150,
-    right: -20,
-    top: -100,
-  },
   identity: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: -26,
-    paddingHorizontal: 14,
+    marginTop: 4,
   },
   name: { fontSize: 26, lineHeight: 34, marginTop: 20 },
   bio: { color: c.muted, marginTop: 7, marginBottom: 20 },
@@ -481,6 +530,19 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: c.line,
   },
+  investment: {
+    minHeight: 84,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 11,
+    borderRadius: 16,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.line,
+  },
+  investmentImage: { width: 48, height: 64, borderRadius: 9, backgroundColor: c.line },
+  investmentReturn: { width: 82, flexShrink: 1, alignItems: 'flex-end', gap: 5 },
   network: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.lime },
   credits: { fontSize: 11, color: c.muted, marginTop: 15, marginBottom: 25, lineHeight: 17 },

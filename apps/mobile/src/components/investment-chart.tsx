@@ -6,7 +6,15 @@ import { investmentCoordinates, signedInvestmentAmount, type InvestmentActivity 
 import { colors as c } from '../lib/theme'
 import { Icon, Txt } from './ui'
 
-export function InvestmentChart({ postId, revision = 0 }: { postId: string; revision?: number }) {
+export function InvestmentChart({
+  postId,
+  revision = 0,
+  compact = false,
+}: {
+  postId: string
+  revision?: number
+  compact?: boolean
+}) {
   const [activity, setActivity] = useState<InvestmentActivity | null>(null)
   const [error, setError] = useState('')
   const [refreshing, setRefreshing] = useState(true)
@@ -74,13 +82,24 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
     <View style={s.root} testID="investment-summary">
       <View style={s.heading}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt style={s.label}>SKR in this market</Txt>
-          <View style={s.amountRow}>
-            <Txt display testID="market-invested-amount" style={s.amount}>
-              {poolAmount ?? '—'}
-            </Txt>
-            <Txt style={s.unit}>Mock SKR</Txt>
-          </View>
+          {compact ? (
+            <View style={s.compactAmountRow}>
+              <Txt style={s.label}>In market</Txt>
+              <Txt display testID="market-invested-amount" style={s.compactAmount} numberOfLines={1}>
+                {poolAmount ?? '—'} SKR
+              </Txt>
+            </View>
+          ) : (
+            <>
+              <Txt style={s.label}>SKR in this market</Txt>
+              <View style={s.amountRow}>
+                <Txt display testID="market-invested-amount" style={s.amount}>
+                  {poolAmount ?? '—'}
+                </Txt>
+                <Txt style={s.unit}>Mock SKR</Txt>
+              </View>
+            </>
+          )}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -93,23 +112,25 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
           <Icon name="refresh-outline" color={c.lime} size={20} />
         </Pressable>
       </View>
-      <Txt style={s.explanation}>
-        {poolAmount !== null
-          ? stale
-            ? 'Last loaded pool balance · refresh needed'
-            : 'Pooled SKR after fees · changes with buys and sells'
-          : refreshing
-            ? 'Reading the market…'
-            : (pool?.reason ?? 'Current pool balance unavailable')}
-      </Txt>
+      {!compact && (
+        <Txt style={s.explanation}>
+          {poolAmount !== null
+            ? stale
+              ? 'Last loaded pool balance · refresh needed'
+              : 'Pooled SKR after fees · changes with buys and sells'
+            : refreshing
+              ? 'Reading the market…'
+              : (pool?.reason ?? 'Current pool balance unavailable')}
+        </Txt>
+      )}
       <View style={s.chartHeader}>
         <Txt style={s.label}>Recorded backing</Txt>
         <Txt style={[s.small, hasDemoActivity && { color: c.yellow }]}>
           {hasDemoActivity ? 'Seeded demo activity' : 'Latest 100 trades'}
         </Txt>
       </View>
-      <View style={s.chart} testID="investment-chart">
-        <Svg width="100%" height={108} viewBox="0 0 300 106">
+      <View style={[s.chart, compact && s.compactChart]} testID="investment-chart">
+        <Svg width="100%" height="100%" viewBox="0 0 300 106">
           {[12, 53, 94].map((y) => (
             <Line key={y} x1={8} y1={y} x2={292} y2={y} stroke={c.line} strokeDasharray="3 5" />
           ))}
@@ -131,7 +152,7 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
           </View>
         )}
       </View>
-      {!!graph?.points.length && (
+      {!!graph?.points.length && !compact && (
         <View
           style={s.range}
           accessible
@@ -146,11 +167,13 @@ export function InvestmentChart({ postId, revision = 0 }: { postId: string; revi
           </Txt>
         </View>
       )}
-      <Txt style={s.small}>
-        {hasDemoActivity
-          ? `${demo!.tradeCount} demo trades · ${demo!.walletCount} demo wallets. Latest 100 Clout buys minus sells; window starts at zero.`
-          : 'Clout buys minus sells, in trade order. This window starts at zero.'}
-      </Txt>
+      {!compact && (
+        <Txt style={s.small}>
+          {hasDemoActivity
+            ? `${demo!.tradeCount} demo trades · ${demo!.walletCount} demo wallets. Latest 100 Clout buys minus sells; window starts at zero.`
+            : 'Clout buys minus sells, in trade order. This window starts at zero.'}
+        </Txt>
+      )}
       {!!error && (
         <Txt accessibilityRole="alert" style={s.error}>
           {activity ? 'Showing previously loaded investments. Refresh to try again.' : error}
@@ -166,11 +189,14 @@ const s = StyleSheet.create({
   label: { color: c.cream, fontSize: 12, fontWeight: '700' },
   amountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' },
   amount: { fontSize: 31, lineHeight: 39, color: c.lime, flexShrink: 1 },
+  compactAmountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  compactAmount: { fontSize: 22, lineHeight: 29, color: c.lime, flex: 1, textAlign: 'right' },
   unit: { fontSize: 12, color: c.muted },
   refresh: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   explanation: { color: c.muted, fontSize: 10, lineHeight: 14, marginTop: 2 },
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginTop: 14 },
   chart: { height: 108, marginTop: 3 },
+  compactChart: { height: 54 },
   empty: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: c.muted, fontSize: 12, backgroundColor: c.ink, padding: 8 },
   range: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 3 },

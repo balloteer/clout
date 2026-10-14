@@ -59,6 +59,8 @@ export default function App() {
     }
   }, [])
   const [market, setMarket] = useState<Post | null>(null)
+  const [portfolioRevision, setPortfolioRevision] = useState(0)
+  const [marketChanged, setMarketChanged] = useState(false)
   const [discovery, setDiscovery] = useState<Post>()
   const [feedPostId, setFeedPostId] = useState<string>()
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('for-you')
@@ -70,14 +72,22 @@ export default function App() {
   }
   const [marketSide, setMarketSide] = useState<'buy' | 'sell'>('buy')
   function showMarket(post: Post, side: 'buy' | 'sell' = 'buy') {
+    setMarketChanged(false)
     setMarketSide(side)
     setMarket(post)
+  }
+  function closeMarket() {
+    setMarket(null)
+    if (marketChanged) setPortfolioRevision((value) => value + 1)
+    setMarketChanged(false)
   }
   const [comments, setComments] = useState<Post | null>(null)
   const [connect, setConnect] = useState(false)
   const { message, posts, following, toggleFollow } = useApp()
   const wallet = useWallet()
   const openConnect = () => {
+    if (marketChanged) setPortfolioRevision((value) => value + 1)
+    setMarketChanged(false)
     setMarket(null)
     setComments(null)
     setConnect(true)
@@ -259,11 +269,17 @@ export default function App() {
                     onConnect={openConnect}
                     onPost={(post, side) => (side ? showMarket(post, side) : watchPost(post))}
                     onExplore={() => setTab('Feed')}
+                    portfolioRevision={portfolioRevision}
                   />
                 ) : tab === 'Mint mock SKR' ? (
                   <DevnetFaucet onConnect={openConnect} />
                 ) : (
-                  <Profile onConnect={openConnect} onFaucet={() => nav('Mint mock SKR')} />
+                  <Profile
+                    onConnect={openConnect}
+                    onFaucet={() => nav('Mint mock SKR')}
+                    onPost={showMarket}
+                    portfolioRevision={portfolioRevision}
+                  />
                 )}
               </View>
               {wide && tab === 'Feed' && (
@@ -390,8 +406,9 @@ export default function App() {
         <MarketSheet
           initialSide={marketSide}
           post={market}
-          onClose={() => setMarket(null)}
+          onClose={closeMarket}
           onConnect={openConnect}
+          onConfirmed={() => setMarketChanged(true)}
         />
       )}
       {comments && (

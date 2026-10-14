@@ -114,6 +114,13 @@ export interface IndexedEvent {
   finality: 'confirmed' | 'finalized'
   demoActivity?: boolean
 }
+export interface PositionHistory {
+  postId: string
+  boughtBaseAmount: string
+  soldBaseAmount: string
+  boughtQuoteAmount: string
+  soldQuoteAmount: string
+}
 export interface TransactionIntent {
   id: string
   wallet: string
@@ -170,12 +177,13 @@ export interface Repository {
   ): Promise<void>
   reconcile(signature: string, status: 'finalized' | 'dropped'): Promise<void>
   getEvents(wallet: string): Promise<IndexedEvent[]>
+  getPositionHistory(wallet: string): Promise<PositionHistory[]>
   getPostEvents(postId: string): Promise<IndexedEvent[]>
   putIntent(intent: TransactionIntent): Promise<void>
   getIntent(id: string): Promise<TransactionIntent | null>
   getActiveLaunch(postId: string): Promise<TransactionIntent | null>
   listUnsettledIntents(): Promise<TransactionIntent[]>
-  updateIntent(id: string, state: TransactionIntent['state'], signature: string | null): Promise<void>
+  updateIntent(id: string, state: TransactionIntent['state'], signature: string | null): Promise<boolean>
   attachMarket(postId: string, market: NonNullable<Post['market']>): Promise<void>
   putQuote(id: string, value: Record<string, unknown>): Promise<void>
   getQuote(id: string): Promise<Record<string, unknown> | null>

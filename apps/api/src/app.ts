@@ -28,6 +28,7 @@ import { unavailableFaucet, type FaucetService } from './faucet.js'
 import { handleSampleMedia } from './sample-media.js'
 import { investmentHistory, MarketMetrics } from './market-metrics.js'
 import { isDemoActivityEvent } from './demo-activity.js'
+import { positionPerformance } from './portfolio.js'
 
 export interface AppOptions {
   repository: Repository
@@ -95,6 +96,41 @@ export function createApp(options: AppOptions) {
       throw new ApiError(503, 'MARKETS_UNAVAILABLE', 'Test SKR markets are not configured yet.')
     return options.markets
   }
+  let devnetCheck: Promise<void> | undefined
+  const assertDevnet = async () => {
+    if (!options.chain) return
+    devnetCheck ??= options.chain.getGenesisHash().then((genesis) => {
+      if (genesis !== 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG')
+        throw new ApiError(503, 'WRONG_NETWORK', 'The configured market RPC is not devnet.')
+    })
+    try {
+      await devnetCheck
+    } catch (error) {
+      devnetCheck = undefined
+      throw error
+    }
+  }
+  const walletState = async (wallet: string, includeGas = true) => {
+    if (!options.chain || !options.quoteMint) return null
+    await assertDevnet()
+    const owner = new PublicKey(wallet)
+    const [accounts, gas] = await Promise.all([
+      options.chain.getParsedTokenAccountsByOwner(owner, {
+        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+      }),
+      includeGas ? options.chain.getBalance(owner, 'confirmed') : Promise.resolve(null),
+    ])
+    const amounts = new Map<string, { amount: bigint; decimals: number }>()
+    for (const entry of accounts.value) {
+      const info = entry.account.data.parsed.info
+      const previous = amounts.get(info.mint)
+      amounts.set(info.mint, {
+        amount: (previous?.amount ?? 0n) + BigInt(info.tokenAmount.amount),
+        decimals: info.tokenAmount.decimals,
+      })
+    }
+    return { amounts, gas }
+  }
   const requirePost = async (id: string) => {
     const post = await repository.getPost(id)
     if (!post || post.status !== 'ready') throw new ApiError(404, 'POST_NOT_FOUND', 'Post not found.')
@@ -106,12 +142,14 @@ export function createApp(options: AppOptions) {
   }
   const presentPost = async (post: Post, wallet?: string, summary?: PostSummary) => ({
     ...post,
-    videoUrl: post.videoUrl?.startsWith('/v1/samples/media/')
-      ? new URL(post.videoUrl, options.origin).toString()
-      : post.videoUrl,
-    thumbnailUrl: post.thumbnailUrl?.startsWith('/v1/samples/media/')
-      ? new URL(post.thumbnailUrl, options.origin).toString()
-      : post.thumbnailUrl,
+    videoUrl:
+      post.videoUrl?.startsWith('/v1/samples/media/') || post.videoUrl?.startsWith('/v1/local-media/')
+        ? new URL(post.videoUrl, options.origin).toString()
+        : post.videoUrl,
+    thumbnailUrl:
+      post.thumbnailUrl?.startsWith('/v1/samples/media/') || post.thumbnailUrl?.startsWith('/v1/local-media/')
+        ? new URL(post.thumbnailUrl, options.origin).toString()
+        : post.thumbnailUrl,
     creator: summary ? summary.creator : await repository.getProfile(post.creatorWallet),
     likes: summary ? summary.likes : await repository.likes(post.id, wallet),
     commentCount: summary ? summary.commentCount : (await repository.listComments(post.id)).length,
@@ -172,6 +210,7 @@ export function createApp(options: AppOptions) {
       const key = request.socket.remoteAddress ?? 'unknown'
       limiter.check(key, 180)
       if (await handleSampleMedia(request, response)) return
+      if (options.media?.handleRequest && (await options.media.handleRequest(request, response))) return
       if (route.startsWith('/v1/auth/')) limiter.check(`auth:${key}`, 20)
       const session = await auth.session(request.headers.authorization)
       const requireWallet = () => {
@@ -626,13 +665,29 @@ export function createApp(options: AppOptions) {
           throw new ApiError(400, 'INVALID_SIDE', 'Choose buy or sell.')
         if (!Number.isInteger(input.slippageBps))
           throw new ApiError(400, 'INVALID_SLIPPAGE', 'Slippage must be integer basis points.')
+        const amountIn = text(input.amountIn, 'Amount', 30)
+        if (/^[1-9]\d*$/.test(amountIn)) {
+          const state = await walletState(wallet, false)
+          if (state) {
+            const mint = input.side === 'buy' ? options.quoteMint! : reference(post).baseMint
+            const available = state.amounts.get(mint)?.amount ?? 0n
+            if (BigInt(amountIn) > available)
+              throw new ApiError(
+                409,
+                input.side === 'buy' ? 'INSUFFICIENT_SKR' : 'INSUFFICIENT_POSITION',
+                input.side === 'buy'
+                  ? 'Enter an amount within your available SKR balance.'
+                  : 'Enter an amount within your post-token position.',
+              )
+          }
+        }
         send(
           200,
           await marketService().quote({
             market: reference(post),
             owner: wallet,
             side: input.side,
-            amountIn: text(input.amountIn, 'Amount', 30),
+            amountIn,
             slippageBps: input.slippageBps as number,
           }),
         )
@@ -794,25 +849,18 @@ export function createApp(options: AppOptions) {
           send(200, { events, positions: [], valuationAvailable: false, balance: null, network: 'devnet' })
           return
         }
-        if ((await options.chain.getGenesisHash()) !== 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG')
-          throw new ApiError(503, 'WRONG_NETWORK', 'The configured market RPC is not devnet.')
-        const owner = new PublicKey(wallet)
-        const [accounts, gas] = await Promise.all([
-          options.chain.getParsedTokenAccountsByOwner(owner, {
-            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-          }),
-          options.chain.getBalance(owner, 'confirmed'),
-        ])
-        const amounts = new Map<string, bigint>()
-        for (const entry of accounts.value) {
-          const info = entry.account.data.parsed.info
-          amounts.set(info.mint, (amounts.get(info.mint) ?? 0n) + BigInt(info.tokenAmount.amount))
-        }
+        const state = await walletState(wallet)
+        if (!state) throw new ApiError(503, 'PORTFOLIO_UNAVAILABLE', 'Wallet balances are unavailable.')
+        const { amounts, gas } = state
+        const histories = new Map(
+          (await repository.getPositionHistory(wallet)).map((history) => [history.postId, history]),
+        )
         const positions = await Promise.all(
           (await repository.listPosts({ includeHidden: true }))
-            .filter((post) => post.market && (amounts.get(post.market.baseMint) ?? 0n) > 0n)
+            .filter((post) => post.market && (amounts.get(post.market.baseMint)?.amount ?? 0n) > 0n)
             .map(async (post) => {
-              const amount = amounts.get(post.market!.baseMint)!.toString()
+              const holding = amounts.get(post.market!.baseMint)!
+              const amount = holding.amount.toString()
               let sellQuote: TradeQuote | null = null
               try {
                 sellQuote = await marketService().quote({
@@ -825,10 +873,17 @@ export function createApp(options: AppOptions) {
               } catch {
                 /* An unquotable holding is still a holding. */
               }
+              const performance = positionPerformance(
+                amount,
+                sellQuote?.expectedAmountOut ?? null,
+                histories.get(post.id),
+              )
               return {
                 post,
                 amount,
                 sellQuote,
+                baseDecimals: holding.decimals,
+                ...performance,
                 earlyBacker: events.some(
                   (event) =>
                     event.postId === post.id && event.kind === 'buy' && event.finality === 'finalized',
@@ -841,7 +896,7 @@ export function createApp(options: AppOptions) {
           positions,
           valuationAvailable: positions.every((position) => !!position.sellQuote),
           balance: {
-            amount: (amounts.get(options.quoteMint) ?? 0n).toString(),
+            amount: (amounts.get(options.quoteMint)?.amount ?? 0n).toString(),
             decimals: options.quoteDecimals ?? 6,
             symbol: 'Test SKR',
             mint: options.quoteMint,

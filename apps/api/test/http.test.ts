@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash, createHmac, generateKeyPairSync, sign } from 'node:crypto'
-import { PublicKey } from '@solana/web3.js'
+import { Connection, PublicKey } from '@solana/web3.js'
 import { createApp, type AppOptions } from '../src/app.js'
 import { RewardService } from '../src/rewards.js'
 import { MemoryRepository } from '../src/memory.js'
@@ -627,6 +627,58 @@ test('HTTP quote, build and confirmation bind the wallet and record actual settl
     assert.equal(activity.data.pool.amount, null)
     assert.deepEqual((await app.request('/v1/posts/sintel/activity')).data.events, [])
     assert.equal((await app.request('/v1/posts/missing/activity')).status, 404)
+  } finally {
+    await app.close()
+  }
+})
+
+test('HTTP quotes reject buys above SKR balance and sells above the wallet position', async () => {
+  const quoteMint = 'So11111111111111111111111111111111111111112'
+  const baseMint = '11111111111111111111111111111111'
+  let quotes = 0
+  const markets = {
+    quote: async (input: any) => {
+      quotes++
+      return {
+        ...input,
+        id: '00000000-0000-4000-8000-000000000099',
+        expectedAmountOut: '1',
+        minimumAmountOut: '1',
+      }
+    },
+  } as unknown as MarketService
+  const chain = {
+    getGenesisHash: async () => 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG',
+    getBalance: async () => 1_000_000,
+    getParsedTokenAccountsByOwner: async () => ({
+      value: [
+        { account: { data: { parsed: { info: { mint: quoteMint, tokenAmount: { amount: '50' } } } } } },
+        { account: { data: { parsed: { info: { mint: baseMint, tokenAmount: { amount: '3' } } } } } },
+      ],
+    }),
+  } as unknown as Connection
+  const app = await fixture(markets, async (repository) => {
+    await repository.attachMarket('big-buck-bunny', { baseMint, dbcPool: 'pool' })
+    return { chain, quoteMint, quoteDecimals: 6 }
+  })
+  try {
+    const owner = await app.login()
+    const request = (side: 'buy' | 'sell', amountIn: string) =>
+      app.request('/v1/posts/big-buck-bunny/quote', {
+        method: 'POST',
+        headers: owner.headers,
+        body: JSON.stringify({ side, amountIn, slippageBps: 100 }),
+      })
+    const excessiveBuy = await request('buy', '51')
+    assert.equal(excessiveBuy.status, 409)
+    assert.equal(excessiveBuy.data.error.code, 'INSUFFICIENT_SKR')
+    const excessiveSell = await request('sell', '4')
+    assert.equal(excessiveSell.status, 409)
+    assert.equal(excessiveSell.data.error.code, 'INSUFFICIENT_POSITION')
+    assert.equal(quotes, 0)
+    assert.equal((await request('buy', '50')).status, 200)
+    assert.equal((await request('sell', '3')).status, 200)
+    assert.equal(quotes, 2)
   } finally {
     await app.close()
   }

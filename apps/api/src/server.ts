@@ -3,7 +3,9 @@ import { Connection } from '@solana/web3.js'
 import { createApp } from './app.js'
 import { MemoryRepository } from './memory.js'
 import { PostgresRepository } from './postgres.js'
-import { CloudflareMedia } from './media.js'
+import { CloudflareMedia, type MediaService } from './media.js'
+import { LocalMedia } from './local-media.js'
+import { fileURLToPath } from 'node:url'
 import { reconcilePending } from './transactions.js'
 import { LinkedAccountService } from './linked-accounts.js'
 import { PostgresLinkedStore } from './linked-store.js'
@@ -39,17 +41,29 @@ const markets = tradingConfigured
       },
     )
   : undefined
-const media =
+let media: MediaService | undefined
+if (
   connected &&
   env.CLOUDFLARE_ACCOUNT_ID &&
   env.CLOUDFLARE_STREAM_API_TOKEN &&
   env.CLOUDFLARE_STREAM_WEBHOOK_SECRET
-    ? new CloudflareMedia(
-        env.CLOUDFLARE_ACCOUNT_ID,
-        env.CLOUDFLARE_STREAM_API_TOKEN,
-        allowedOrigins.map((value) => new URL(value).hostname),
-      )
-    : undefined
+)
+  media = new CloudflareMedia(
+    env.CLOUDFLARE_ACCOUNT_ID,
+    env.CLOUDFLARE_STREAM_API_TOKEN,
+    allowedOrigins.map((value) => new URL(value).hostname),
+  )
+else if (env.LOCAL_UPLOADS_ENABLED === 'true') {
+  const host = new URL(origin).hostname
+  if (env.NODE_ENV === 'production' || !['127.0.0.1', 'localhost', '[::1]'].includes(host))
+    throw new Error('Local uploads require a non-production loopback CLOUT_ORIGIN.')
+  media = new LocalMedia(
+    origin,
+    fileURLToPath(new URL('../../../.tooling/uploads/', import.meta.url)),
+    (uid, videoUrl) => repository.updateStream(uid, 'ready', videoUrl, null),
+    (uid) => repository.updateStream(uid, 'failed', null, null),
+  )
+}
 let linkedAccounts: LinkedAccountService | undefined
 if (env.LINKED_ACCOUNTS_ENABLED === 'true') {
   if (

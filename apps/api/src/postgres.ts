@@ -13,6 +13,7 @@ import {
   type IndexedEvent,
   type Post,
   type PostSummary,
+  type PositionHistory,
   type Profile,
   type Repository,
   type Session,
@@ -135,7 +136,14 @@ export class PostgresRepository implements Repository {
     thumbnailUrl: string | null,
   ) {
     const rows = await this
-      .sql`update public.posts set status = ${status}, data = data || ${this.sql.json({ status, videoUrl, thumbnailUrl })} where stream_uid = ${uid} and status = 'processing' returning id`
+      .sql`update public.posts set status = ${status}, data = data || ${this.sql.json({ status, videoUrl, thumbnailUrl })}
+        where stream_uid = ${uid} and (
+          status = 'processing' or (
+            status = ${status}
+            and data->>'videoUrl' is not distinct from ${videoUrl}
+            and data->>'thumbnailUrl' is not distinct from ${thumbnailUrl}
+          )
+        ) returning id`
     return rows.length > 0
   }
   async listComments(postId: string): Promise<Comment[]> {
@@ -346,6 +354,21 @@ export class PostgresRepository implements Repository {
         .sql`select data from private.indexed_events where wallet = ${wallet} order by slot desc limit 1000`
     ).map((row) => row.data)
   }
+  async getPositionHistory(wallet: string): Promise<PositionHistory[]> {
+    const rows = await this.sql`select post_id,
+      coalesce(sum((data->>'baseAmount')::numeric) filter (where data->>'kind' = 'buy'), 0)::text bought_base,
+      coalesce(sum((data->>'baseAmount')::numeric) filter (where data->>'kind' = 'sell'), 0)::text sold_base,
+      coalesce(sum((data->>'quoteAmount')::numeric) filter (where data->>'kind' = 'buy'), 0)::text bought_quote,
+      coalesce(sum((data->>'quoteAmount')::numeric) filter (where data->>'kind' = 'sell'), 0)::text sold_quote
+      from private.indexed_events where wallet = ${wallet} and finality in ('confirmed', 'finalized') group by post_id`
+    return rows.map((row) => ({
+      postId: row.post_id,
+      boughtBaseAmount: row.bought_base,
+      soldBaseAmount: row.sold_base,
+      boughtQuoteAmount: row.bought_quote,
+      soldQuoteAmount: row.sold_quote,
+    }))
+  }
   async getPostEvents(postId: string): Promise<IndexedEvent[]> {
     return (
       await this
@@ -372,8 +395,9 @@ export class PostgresRepository implements Repository {
     ).map((row) => row.data)
   }
   async updateIntent(id: string, state: TransactionIntent['state'], signature: string | null) {
-    await this
-      .sql`update private.transaction_intents set state = ${state}, signature = ${signature}, data = data || ${this.sql.json({ state, signature })} where id = ${id} and state <> 'finalized' and (signature is null or signature = ${signature})`
+    const rows = await this
+      .sql`update private.transaction_intents set state = ${state}, signature = ${signature}, data = data || ${this.sql.json({ state, signature })} where id = ${id} and state <> 'finalized' and (signature is null or signature = ${signature}) returning id`
+    return rows.length === 1
   }
   async attachMarket(postId: string, market: NonNullable<Post['market']>) {
     await this

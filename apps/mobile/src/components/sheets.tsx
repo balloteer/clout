@@ -18,7 +18,7 @@ import { walletConnectionError } from '../lib/wallet-errors'
 import { useApp } from '../lib/store'
 import { api, API_URL, postJson } from '../lib/api'
 import { sampleComments, imageSource, type Post } from '../lib/data'
-import { displayAtomic, isQuoteExpired, toAtomic } from '../lib/amounts'
+import { displayAtomic, displayBps, displaySignedAtomic, isQuoteExpired, toAtomic } from '../lib/amounts'
 import {
   confirmPending,
   executeIntent,
@@ -29,7 +29,7 @@ import {
 } from '../lib/transactions'
 import { Avatar, Badge, Button, Icon, Txt } from './ui'
 import { InvestmentChart } from './investment-chart'
-import type { ApiProfile } from '../lib/contracts'
+import type { ApiProfile, Portfolio } from '../lib/contracts'
 type Quote = {
   id: string
   expectedAmountOut: string
@@ -45,10 +45,12 @@ export function Sheet({
   title,
   onClose,
   children,
+  footer,
 }: {
   title: string
   onClose: () => void
   children: React.ReactNode
+  footer?: React.ReactNode
 }) {
   const insets = useSafeAreaInsets()
   return (
@@ -84,10 +86,13 @@ export function Sheet({
             style={s.sheetScroll}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            contentContainerStyle={{ paddingBottom: Math.max(30, insets.bottom + 16) }}
+            contentContainerStyle={{ paddingBottom: footer ? 10 : Math.max(30, insets.bottom + 16) }}
           >
             {children}
           </ScrollView>
+          {!!footer && (
+            <View style={[s.sheetFooter, { paddingBottom: Math.max(12, insets.bottom + 8) }]}>{footer}</View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -146,6 +151,7 @@ type MarketSheetProps = {
   post: Post
   onClose: () => void
   onConnect: () => void
+  onConfirmed?: () => void
   initialSide?: 'buy' | 'sell'
 }
 export function MarketSheet(props: MarketSheetProps) {
@@ -157,7 +163,7 @@ export function MarketSheet(props: MarketSheetProps) {
     />
   )
 }
-function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: MarketSheetProps) {
+function WalletMarketSheet({ post, onClose, onConnect, onConfirmed, initialSide = 'buy' }: MarketSheetProps) {
   const wallet = useWallet()
   const { notify } = useApp()
   const [side, setSide] = useState<'buy' | 'sell'>(initialSide)
@@ -169,8 +175,30 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
   const [pending, setPending] = useState<PendingTransaction | null>(null)
   const [decimals, setDecimals] = useState(6)
   const [configReady, setConfigReady] = useState(false)
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [portfolioLoading, setPortfolioLoading] = useState(!!wallet.address && !!API_URL)
   const [activityRevision, setActivityRevision] = useState(0)
   const action = useRef(false)
+  const initializedSell = useRef(false)
+  const position = portfolio?.positions.find((item) => item.post.id === post.id)
+  const baseDecimals = position?.baseDecimals ?? 6
+  const available = portfolio?.balance
+  async function refreshPortfolio() {
+    if (!wallet.address || !API_URL) return
+    const value = await api<Portfolio>('/v1/portfolio')
+    setPortfolio(value)
+    const holding = value.positions.find((item) => item.post.id === post.id)
+    if (side === 'sell' && !holding) {
+      setSide('buy')
+      setAmount('10')
+      setQuote(null)
+    }
+    if (side === 'sell' && holding && !initializedSell.current) {
+      initializedSell.current = true
+      const half = BigInt(holding.amount) / 2n || BigInt(holding.amount)
+      setAmount(displayAtomic(half.toString(), holding.baseDecimals, holding.baseDecimals))
+    }
+  }
   useEffect(() => {
     let active = true
     if (wallet.address)
@@ -211,21 +239,57 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
                 : 'Market configuration is unavailable. Reopen this post to retry.',
             )
         })
+    if (wallet.address && API_URL)
+      void api<Portfolio>('/v1/portfolio')
+        .then((value) => {
+          if (!active) return
+          setPortfolio(value)
+          const holding = value.positions.find((item) => item.post.id === post.id)
+          if (initialSide === 'sell' && !holding) {
+            setSide('buy')
+            setAmount('10')
+          } else if (initialSide === 'sell' && holding) {
+            initializedSell.current = true
+            const half = BigInt(holding.amount) / 2n || BigInt(holding.amount)
+            setAmount(displayAtomic(half.toString(), holding.baseDecimals, holding.baseDecimals))
+          }
+        })
+        .catch((err) => {
+          if (active)
+            setError(err instanceof Error ? err.message : 'Wallet balances are temporarily unavailable.')
+        })
+        .finally(() => {
+          if (active) setPortfolioLoading(false)
+        })
     return () => {
       active = false
     }
-  }, [post.id, post.market, wallet.address])
+  }, [initialSide, post.id, post.market, wallet.address])
   function changeAmount(value: string) {
-    if (action.current || pending) return
+    if (busy || pending) return
     setAmount(value)
     setQuote(null)
     setError('')
   }
   function changeSide(value: 'buy' | 'sell') {
-    if (action.current || pending) return
+    if (busy || pending) return
+    if (value === 'sell' && !position) return
     setSide(value)
+    if (value === 'buy') setAmount('10')
+    else {
+      initializedSell.current = true
+      const half = BigInt(position!.amount) / 2n || BigInt(position!.amount)
+      setAmount(displayAtomic(half.toString(), position!.baseDecimals, position!.baseDecimals))
+    }
     setQuote(null)
     setError('')
+  }
+  function chooseSellPercent(percent: number) {
+    if (!position || busy || pending) return
+    const held = BigInt(position.amount)
+    const selected = percent === 100 ? held : (held * BigInt(percent)) / 100n
+    if (selected <= 0n) return
+    changeAmount(displayAtomic(selected.toString(), position.baseDecimals, position.baseDecimals))
   }
   function report(result: TransactionResult, description: string) {
     if (result.status === 'confirmed') {
@@ -253,7 +317,14 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
     setError('')
     try {
       if (p.owner !== wallet.address) throw new Error('Connect the wallet that signed this transaction.')
-      report(await confirmPending(p.owner), p.description ?? 'Wallet transaction')
+      const result = await confirmPending(p.owner)
+      report(result, p.description ?? 'Wallet transaction')
+      if (result.status === 'confirmed') {
+        await refreshPortfolio().catch(() =>
+          setStatus('Transaction confirmed on devnet. Reopen this view to refresh your balances.'),
+        )
+        onConfirmed?.()
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Confirmation unavailable. Your transaction may still settle.',
@@ -282,7 +353,7 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
       }
       const result = await postJson<Quote>(`/v1/posts/${post.id}/quote`, {
         side,
-        amountIn: toAtomic(amount, side === 'buy' ? decimals : 6),
+        amountIn: toAtomic(amount, side === 'buy' ? decimals : baseDecimals),
         slippageBps: 100,
       })
       setQuote(result)
@@ -321,6 +392,13 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
       const result = await executeIntent(built, wallet, description)
       setQuote(null)
       report(result, description)
+      if (result.status === 'confirmed')
+        try {
+          await refreshPortfolio()
+        } catch {
+          setStatus(`${description} confirmed on devnet. Reopen this view to refresh your balances.`)
+        }
+      if (result.status === 'confirmed') onConfirmed?.()
     } catch (err) {
       setError(
         err instanceof Error
@@ -333,20 +411,61 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
       setBusy(false)
     }
   }
+  let requestedAtomic: bigint | null = null
+  let amountError = ''
+  try {
+    requestedAtomic = BigInt(toAtomic(amount, side === 'buy' ? decimals : baseDecimals))
+    const limit = side === 'buy' ? available?.amount : position?.amount
+    if (limit !== undefined && requestedAtomic > BigInt(limit))
+      amountError =
+        side === 'buy'
+          ? 'Enter an amount within your available SKR balance.'
+          : 'Enter an amount within your post-token position.'
+  } catch (err) {
+    amountError = err instanceof Error ? err.message : 'Enter a valid amount.'
+  }
+  const performancePositive =
+    (position?.profitLossQuoteAmount && BigInt(position.profitLossQuoteAmount) >= 0n) ?? false
+  const footerAction = post.market ? (
+    <Button
+      disabled={
+        busy ||
+        (!pending &&
+          (!configReady ||
+            !!amountError ||
+            !requestedAtomic ||
+            (!!wallet.address && !portfolio) ||
+            (side === 'buy' && !!wallet.address && !available) ||
+            (side === 'sell' && !position)))
+      }
+      onPress={() => void (pending ? check(pending) : quote ? trade() : getQuote())}
+    >
+      {busy
+        ? 'Working…'
+        : pending
+          ? 'Check transaction'
+          : quote
+            ? 'Approve in wallet'
+            : side === 'buy'
+              ? 'Review investment'
+              : 'Review sale'}
+    </Button>
+  ) : pending ? (
+    <Button disabled={busy} onPress={() => void check(pending)}>
+      Check pending transaction
+    </Button>
+  ) : undefined
   return (
-    <Sheet title="Video investments" onClose={onClose}>
+    <Sheet title="Video investments" onClose={onClose} footer={footerAction}>
       <View style={s.post}>
         <Image source={imageSource(post.poster)} style={s.thumb} />
         <View style={{ flex: 1, gap: 5 }}>
           <Txt style={{ fontWeight: '700' }}>{post.creator}</Txt>
-          <Txt numberOfLines={2} style={{ fontSize: 12, color: c.muted }}>
+          <Txt numberOfLines={1} style={{ fontSize: 12, color: c.muted }}>
             {post.caption}
           </Txt>
         </View>
       </View>
-      {!!post.source && post.market && (
-        <Txt style={s.marketAttribution}>Clout demo market · Independent of the source publisher.</Txt>
-      )}
       {!post.market ? (
         <View style={s.marketEmpty}>
           <Icon name="sparkles-outline" size={34} color={c.pink} />
@@ -363,17 +482,67 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
         </View>
       ) : (
         <>
-          <InvestmentChart postId={post.id} revision={activityRevision} />
+          <View style={s.portfolioSummary}>
+            <Row
+              label="Available to invest"
+              value={
+                available
+                  ? `${displayAtomic(available.amount, available.decimals)} SKR`
+                  : portfolioLoading
+                    ? 'Loading…'
+                    : wallet.address
+                      ? 'Unavailable'
+                      : 'Connect wallet'
+              }
+              valueColor={c.lime}
+            />
+            {position && (
+              <>
+                <Row
+                  label="Backed with"
+                  value={
+                    position.backingAvailable
+                      ? `${displayAtomic(position.boughtQuoteAmount, decimals)} SKR`
+                      : 'Unavailable'
+                  }
+                />
+                <Row
+                  label="Value now"
+                  value={
+                    position.sellQuote
+                      ? `${displayAtomic(position.sellQuote.expectedAmountOut, position.sellQuote.outputDecimals)} SKR`
+                      : 'Quote unavailable'
+                  }
+                />
+                <Row
+                  label="Total return"
+                  value={
+                    position.performanceAvailable && position.profitLossQuoteAmount && position.returnBps
+                      ? `${displaySignedAtomic(position.profitLossQuoteAmount, decimals)} SKR · ${displayBps(position.returnBps)}`
+                      : 'Unavailable'
+                  }
+                  valueColor={
+                    position.performanceAvailable ? (performancePositive ? c.lime : c.orange) : c.muted
+                  }
+                />
+              </>
+            )}
+          </View>
+          <InvestmentChart postId={post.id} revision={activityRevision} compact />
           <View style={s.tradeTabs}>
             {(['buy', 'sell'] as const).map((value) => (
               <Pressable
                 accessibilityRole="tab"
                 aria-selected={side === value}
-                disabled={busy || !!pending}
-                accessibilityState={{ selected: side === value }}
                 key={value}
                 onPress={() => changeSide(value)}
-                style={[s.tradeTab, side === value && { backgroundColor: c.cream }]}
+                accessibilityState={{ selected: side === value, disabled: value === 'sell' && !position }}
+                disabled={busy || !!pending || (value === 'sell' && !position)}
+                style={[
+                  s.tradeTab,
+                  side === value && { backgroundColor: c.cream },
+                  value === 'sell' && !position && { opacity: 0.35 },
+                ]}
               >
                 <Txt style={{ color: side === value ? c.ink : c.muted, fontWeight: '700' }}>
                   {value === 'buy' ? 'Back this' : 'Sell position'}
@@ -391,22 +560,43 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
               style={s.amountInput}
             />
             <Txt display style={{ fontSize: 22, color: c.lime, flexShrink: 0 }}>
-              {side === 'buy' ? 'Mock SKR' : 'Post tokens'}
+              {side === 'buy' ? 'SKR' : 'tokens'}
             </Txt>
           </View>
           <View style={s.presets}>
-            {['10', '25', '50', '100'].map((value) => (
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy || !!pending}
-                key={value}
-                onPress={() => changeAmount(value)}
-                style={s.preset}
-              >
-                <Txt style={{ fontSize: 13 }}>{value}</Txt>
-              </Pressable>
-            ))}
+            {side === 'buy'
+              ? ['10', '25', '50', '100'].map((value) => {
+                  const balancePending = !!wallet.address && (portfolioLoading || !available)
+                  const exceedsBalance = available
+                    ? BigInt(toAtomic(value, decimals)) > BigInt(available.amount)
+                    : false
+                  const presetDisabled = busy || !!pending || balancePending || exceedsBalance
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: presetDisabled }}
+                      disabled={presetDisabled}
+                      key={value}
+                      onPress={() => changeAmount(value)}
+                      style={[s.preset, presetDisabled && { opacity: 0.35 }]}
+                    >
+                      <Txt style={{ fontSize: 13 }}>{value} SKR</Txt>
+                    </Pressable>
+                  )
+                })
+              : [25, 50, 75, 100].map((value) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={busy || !!pending}
+                    key={value}
+                    onPress={() => chooseSellPercent(value)}
+                    style={s.preset}
+                  >
+                    <Txt style={{ fontSize: 13 }}>{value === 100 ? 'Max' : `${value}%`}</Txt>
+                  </Pressable>
+                ))}
           </View>
+          {!!amountError && <Txt style={s.amountError}>{amountError}</Txt>}
           {quote && (
             <View style={s.quote}>
               <Row
@@ -425,18 +615,7 @@ function WalletMarketSheet({ post, onClose, onConnect, initialSide = 'buy' }: Ma
               <Row label="Network fee" value="SOL · shown by wallet" />
             </View>
           )}
-          <Button
-            disabled={busy || (!pending && !configReady)}
-            onPress={() => void (pending ? check(pending) : quote ? trade() : getQuote())}
-          >
-            {busy ? 'Working…' : pending ? 'Check transaction' : quote ? 'Approve in wallet' : 'Get quote'}
-          </Button>
         </>
-      )}
-      {pending && !post.market && (
-        <Button disabled={busy} onPress={() => void check(pending)}>
-          Check pending transaction
-        </Button>
       )}
       {!!status && <Txt style={s.helper}>{status}</Txt>}
       {!!error && (
@@ -578,11 +757,11 @@ function presentComment(item: ApiComment) {
     backer: item.earlyBacker === true,
   }
 }
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
       <Txt style={{ fontSize: 12, color: c.muted }}>{label}</Txt>
-      <Txt style={{ fontSize: 12, fontWeight: '600' }}>{value}</Txt>
+      <Txt style={{ fontSize: 12, fontWeight: '600', color: valueColor ?? c.cream }}>{value}</Txt>
     </View>
   )
 }
@@ -605,6 +784,7 @@ const s = StyleSheet.create({
     borderColor: c.line,
   },
   sheetScroll: { flexShrink: 1 },
+  sheetFooter: { paddingTop: 10 },
   handle: {
     height: 4,
     width: 35,
@@ -631,9 +811,17 @@ const s = StyleSheet.create({
   },
   helper: { fontSize: 13, color: c.muted, textAlign: 'center', marginVertical: 15 },
   error: { fontSize: 13, color: c.orange, marginTop: 16, lineHeight: 20 },
-  post: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
-  thumb: { width: 44, height: 52, borderRadius: 10 },
-  marketAttribution: { fontSize: 10, lineHeight: 14, color: c.muted, marginBottom: 12 },
+  post: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  thumb: { width: 36, height: 42, borderRadius: 8 },
+  portfolioSummary: {
+    gap: 6,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 15,
+    padding: 12,
+    marginBottom: 6,
+  },
   tradeTabs: { backgroundColor: c.surface, borderRadius: 13, padding: 4, flexDirection: 'row' },
   tradeTab: {
     flex: 1,
@@ -644,8 +832,8 @@ const s = StyleSheet.create({
     borderRadius: 10,
   },
   marketEmpty: { alignItems: 'center', paddingVertical: 30, gap: 18 },
-  amount: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  amountInput: { fontFamily: fonts.display, color: c.cream, fontSize: 43, flex: 1, minWidth: 0 },
+  amount: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  amountInput: { fontFamily: fonts.display, color: c.cream, fontSize: 34, flex: 1, minWidth: 0 },
   presets: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   preset: {
     flex: 1,
@@ -656,6 +844,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
   },
+  amountError: { color: c.orange, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   quote: { gap: 14, marginBottom: 25, backgroundColor: c.surface, borderRadius: 16, padding: 16 },
   footer: {
     flexDirection: 'row',

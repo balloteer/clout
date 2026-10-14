@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../lib/store'
 import { useWallet } from '../lib/wallet'
 import { api, API_URL } from '../lib/api'
-import { displayAtomic } from '../lib/amounts'
+import { displayAtomic, displayBps, displaySignedAtomic } from '../lib/amounts'
 import { mapPost, type Portfolio } from '../lib/contracts'
 import { colors as c } from '../lib/theme'
 import { Badge, Button, Empty, Icon, Txt } from '../components/ui'
@@ -24,19 +24,16 @@ type Position = Portfolio['positions'][number]
 
 function Receipt({
   position,
-  events,
   quoteDecimals,
   onClose,
 }: {
   position: Position
-  events: Portfolio['events']
   quoteDecimals: number
   onClose: () => void
 }) {
   const { notify } = useApp()
   const [reveal] = useState(() => new Animated.Value(0))
   const post = mapPost(position.post)
-  const purchase = events.filter((event) => event.postId === position.post.id && event.kind === 'buy').at(-1)
   useEffect(() => {
     let active = true
     void AccessibilityInfo.isReduceMotionEnabled()
@@ -58,18 +55,29 @@ function Receipt({
     }
   }, [reveal])
   async function share() {
-    if (!purchase) return
+    if (!position.backingAvailable) return
     try {
+      const lines = [
+        `I backed this on Clout: ${post.caption}`,
+        `${displayAtomic(position.boughtQuoteAmount, quoteDecimals)} Test SKR backed on Solana devnet.`,
+        position.sellQuote
+          ? `Current value: ${displayAtomic(position.sellQuote.expectedAmountOut, position.sellQuote.outputDecimals)} Test SKR.`
+          : null,
+        position.performanceAvailable && position.profitLossQuoteAmount && position.returnBps
+          ? `Total return: ${displaySignedAtomic(position.profitLossQuoteAmount, quoteDecimals)} Test SKR (${displayBps(position.returnBps)}).`
+          : null,
+        'Seek the best content, win SKR',
+      ]
       await Share.share({
-        title: 'My Clout discovery',
-        message: `I backed this on Clout: ${post.caption}\n${displayAtomic(purchase.quoteAmount, quoteDecimals)} Test SKR on devnet.\nSeek the best content, win SKR\nhttps://explorer.solana.com/tx/${purchase.signature}?cluster=devnet`,
+        title: 'My Clout investment',
+        message: lines.filter((line): line is string => !!line).join('\n'),
       })
     } catch {
-      notify('The receipt could not be shared. Try again.')
+      notify('The investment could not be shared. Try again.')
     }
   }
   return (
-    <Sheet title="Keep the receipt" onClose={onClose}>
+    <Sheet title="Investment details" onClose={onClose}>
       <Animated.View
         style={[
           s.receipt,
@@ -95,13 +103,25 @@ function Receipt({
             {post.caption}
           </Txt>
           <Txt style={{ color: c.muted }}>{post.creator}</Txt>
-          {purchase ? (
+          {position.backingAvailable ? (
             <>
               <Txt style={{ color: c.lime }}>
-                Backed with {displayAtomic(purchase.quoteAmount, quoteDecimals)} Test SKR
+                Backed with {displayAtomic(position.boughtQuoteAmount, quoteDecimals)} Test SKR total
               </Txt>
               <Txt style={s.small}>
-                Received {displayAtomic(purchase.baseAmount, 6)} post tokens in this purchase.
+                Holding {displayAtomic(position.amount, position.baseDecimals)} post tokens.
+              </Txt>
+              <Txt style={s.small}>
+                Current value:{' '}
+                {position.sellQuote
+                  ? `${displayAtomic(position.sellQuote.expectedAmountOut, position.sellQuote.outputDecimals)} Test SKR`
+                  : 'quote unavailable'}
+              </Txt>
+              <Txt style={s.small}>
+                Total return:{' '}
+                {position.performanceAvailable && position.profitLossQuoteAmount && position.returnBps
+                  ? `${displaySignedAtomic(position.profitLossQuoteAmount, quoteDecimals)} Test SKR · ${displayBps(position.returnBps)}`
+                  : 'unavailable'}
               </Txt>
             </>
           ) : (
@@ -109,11 +129,11 @@ function Receipt({
               Ownership verified from your wallet. No Clout purchase receipt is recorded for this position.
             </Txt>
           )}
-          <Txt style={s.small}>Devnet · A purchase receipt, not a separate NFT.</Txt>
+          <Txt style={s.small}>Devnet position summary · Test tokens have no real value.</Txt>
         </View>
       </Animated.View>
-      <Button onPress={() => void share()} disabled={!purchase} icon="share-social-outline">
-        Share verified receipt
+      <Button onPress={() => void share()} disabled={!position.backingAvailable} icon="share-social-outline">
+        Share investment
       </Button>
     </Sheet>
   )
@@ -123,6 +143,7 @@ type CollectionProps = {
   onConnect: () => void
   onPost: (post: Post, side?: 'buy' | 'sell') => void
   onExplore: () => void
+  portfolioRevision?: number
 }
 
 export function Collection(props: CollectionProps) {
@@ -130,10 +151,10 @@ export function Collection(props: CollectionProps) {
   return <WalletCollection key={wallet.address ?? 'guest'} {...props} />
 }
 
-function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
+function WalletCollection({ onConnect, onPost, onExplore, portfolioRevision = 0 }: CollectionProps) {
   const { posts, saved } = useApp()
   const wallet = useWallet()
-  const [tab, setTab] = useState<'Saved' | 'Positions'>('Saved')
+  const [tab, setTab] = useState<'Saved' | 'Positions'>('Positions')
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [loading, setLoading] = useState(!!wallet.address && !!API_URL)
   const [error, setError] = useState('')
@@ -158,8 +179,9 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
     }
   }, [wallet.address])
   useEffect(() => {
+    void portfolioRevision
     void Promise.resolve().then(load)
-  }, [load])
+  }, [load, portfolioRevision])
   async function refresh() {
     if (!wallet.address || !API_URL) return
     setLoading(true)
@@ -174,6 +196,14 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
     quotes.every((quote) => quote?.outputDecimals === quoteDecimals)
       ? quotes.reduce((sum, quote) => sum + BigInt(quote?.expectedAmountOut ?? '0'), 0n).toString()
       : null
+  const performancePositions = portfolio?.positions.filter((position) => position.performanceAvailable) ?? []
+  const totalReturn =
+    portfolio?.positions.length && performancePositions.length === portfolio.positions.length
+      ? performancePositions
+          .reduce((sum, position) => sum + BigInt(position.profitLossQuoteAmount ?? '0'), 0n)
+          .toString()
+      : null
+  const returnPositive = totalReturn !== null && BigInt(totalReturn) >= 0n
   return (
     <>
       <ScrollView
@@ -184,24 +214,35 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
       >
         <View style={s.heading}>
           <Txt display style={s.title}>
-            Good taste.{'\n'}Keep the receipts.
+            Investments
           </Txt>
-          <View style={s.sticker}>
-            <Icon name="layers" size={35} color={c.ink} />
-          </View>
+          <Badge color={c.surface}>{portfolio?.positions.length ?? 0} positions</Badge>
         </View>
-        <Txt style={s.subtitle}>Your finds, your positions, your collection.</Txt>
         <View style={s.balance}>
           <View>
-            <Txt style={s.small}>Sell value · Test SKR</Txt>
+            <Txt style={s.small}>Current value</Txt>
             <Txt display style={{ fontSize: 36, lineHeight: 48 }}>
-              {total !== null ? displayAtomic(total, quoteDecimals) : '—'}
+              {total !== null ? `${displayAtomic(total, quoteDecimals)} SKR` : '—'}
             </Txt>
           </View>
-          <View style={{ alignItems: 'flex-end', gap: 6 }}>
-            <Txt style={s.small}>Devnet</Txt>
-            <Txt style={{ fontSize: 12, color: c.lime }}>
-              {loading ? 'Refreshing…' : 'Includes market fees'}
+          <View style={{ alignItems: 'flex-end', gap: 5 }}>
+            <Txt style={s.small}>Available</Txt>
+            <Txt style={{ fontSize: 18, color: c.cream, fontWeight: '700' }}>
+              {portfolio?.balance
+                ? `${displayAtomic(portfolio.balance.amount, portfolio.balance.decimals)} SKR`
+                : '—'}
+            </Txt>
+            <Txt
+              style={{
+                fontSize: 12,
+                color: totalReturn === null ? c.muted : returnPositive ? c.lime : c.orange,
+              }}
+            >
+              {loading
+                ? 'Refreshing…'
+                : totalReturn === null
+                  ? 'Return unavailable'
+                  : `${displaySignedAtomic(totalReturn, quoteDecimals)} SKR total return`}
             </Txt>
           </View>
         </View>
@@ -222,7 +263,7 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
           </Pressable>
         )}
         <View style={s.tabs}>
-          {(['Saved', 'Positions'] as const).map((value) => (
+          {(['Positions', 'Saved'] as const).map((value) => (
             <Pressable
               accessibilityRole="tab"
               aria-selected={tab === value}
@@ -303,6 +344,7 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
                     accessibilityRole="button"
                     accessibilityLabel={`Reveal receipt for ${post.caption}`}
                     onPress={() => setReceipt(position)}
+                    style={s.positionMedia}
                   >
                     <Image source={imageSource(post.poster)} style={s.positionImage} />
                     <View style={s.positionLabel}>
@@ -312,17 +354,44 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
                       <Icon name="expand-outline" size={18} />
                     </View>
                   </Pressable>
-                  <View style={{ padding: 18, gap: 12 }}>
+                  <View style={s.positionBody}>
                     <Txt display style={{ fontSize: 21 }} numberOfLines={2}>
                       {post.caption}
                     </Txt>
-                    <Txt style={s.small}>{displayAtomic(position.amount, 6)} post tokens</Txt>
+                    <Txt style={s.small}>
+                      {displayAtomic(position.amount, position.baseDecimals)} post tokens
+                    </Txt>
                     <View style={s.row}>
-                      <Txt style={s.small}>Estimated sell value</Txt>
-                      <Txt style={{ color: c.lime }}>
+                      <Txt style={s.small}>Backed with</Txt>
+                      <Txt>
+                        {position.backingAvailable
+                          ? `${displayAtomic(position.boughtQuoteAmount, quoteDecimals)} SKR`
+                          : 'Unavailable'}
+                      </Txt>
+                    </View>
+                    <View style={s.row}>
+                      <Txt style={s.small}>Value now</Txt>
+                      <Txt style={{ color: c.cream }}>
                         {position.sellQuote
                           ? `${displayAtomic(position.sellQuote.expectedAmountOut, position.sellQuote.outputDecimals)} Test SKR`
                           : 'Quote unavailable'}
+                      </Txt>
+                    </View>
+                    <View style={s.row}>
+                      <Txt style={s.small}>Total return</Txt>
+                      <Txt
+                        style={{
+                          color: !position.performanceAvailable
+                            ? c.muted
+                            : position.profitLossQuoteAmount && BigInt(position.profitLossQuoteAmount) >= 0n
+                              ? c.lime
+                              : c.orange,
+                          fontWeight: '700',
+                        }}
+                      >
+                        {position.performanceAvailable && position.profitLossQuoteAmount && position.returnBps
+                          ? `${displaySignedAtomic(position.profitLossQuoteAmount, quoteDecimals)} SKR · ${displayBps(position.returnBps)}`
+                          : 'Unavailable'}
                       </Txt>
                     </View>
                     <Button onPress={() => onPost(post, 'sell')} secondary icon="swap-horizontal">
@@ -355,12 +424,7 @@ function WalletCollection({ onConnect, onPost, onExplore }: CollectionProps) {
         </View>
       </ScrollView>
       {receipt && portfolio && (
-        <Receipt
-          position={receipt}
-          events={portfolio.events}
-          quoteDecimals={quoteDecimals}
-          onClose={() => setReceipt(null)}
-        />
+        <Receipt position={receipt} quoteDecimals={quoteDecimals} onClose={() => setReceipt(null)} />
       )}
     </>
   )
@@ -376,16 +440,6 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: { fontSize: 32, lineHeight: 40, flexBasis: 220, flexGrow: 1, flexShrink: 1, minWidth: 0 },
-  sticker: {
-    backgroundColor: c.lime,
-    width: 66,
-    height: 72,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '9deg' }],
-  },
-  subtitle: { color: c.muted, marginTop: 13, marginBottom: 26 },
   balance: {
     backgroundColor: c.surface,
     borderRadius: 20,
@@ -421,15 +475,22 @@ const s = StyleSheet.create({
   small: { color: c.muted, fontSize: 12 },
   error: { color: c.orange, marginTop: 15 },
   refresh: { flexDirection: 'row', justifyContent: 'flex-end', gap: 6, paddingTop: 14 },
-  position: { backgroundColor: c.surface, borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
-  positionImage: { width: '100%', height: 220 },
+  position: {
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  positionMedia: { width: 92, minHeight: 244, alignSelf: 'stretch' },
+  positionImage: { position: 'absolute', inset: 0 },
+  positionBody: { flex: 1, minWidth: 0, padding: 16, gap: 10 },
   positionLabel: {
     position: 'absolute',
-    bottom: 14,
-    left: 14,
-    right: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    bottom: 8,
+    left: 8,
+    width: 76,
+    gap: 6,
     alignItems: 'center',
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },

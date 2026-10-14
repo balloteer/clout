@@ -119,3 +119,47 @@ test('pending market launch is unique until the existing transaction expires', a
   await repository.putIntent(second)
   assert.equal((await repository.getActiveLaunch(first.postId))?.id, second.id)
 })
+
+test('concurrent different signatures cannot both settle the same intent', async () => {
+  const repository = new MemoryRepository()
+  const intent = tradeIntent()
+  await repository.putIntent(structuredClone(intent))
+  let started = 0
+  let release!: () => void
+  const bothStarted = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const markets = {
+    reconcileTrade: async ({ signature }: { signature: string }) => {
+      if (++started === 2) release()
+      await bothStarted
+      return {
+        status: 'confirmed',
+        signature,
+        slot: 55,
+        tokenDeltas: { 'post-token': '900', 'test-skr': '-100' },
+        feeLamports: '5000',
+        blockTime: 1,
+      }
+    },
+  } as unknown as MarketService
+  const chain = {
+    getSignatureStatuses: async () => ({ value: [{ err: null, confirmationStatus: 'finalized' }] }),
+  } as unknown as Connection
+  const results = await Promise.allSettled([
+    reconcileIntent(repository, markets, structuredClone(intent), 'signature-a', chain),
+    reconcileIntent(repository, markets, structuredClone(intent), 'signature-b', chain),
+  ])
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1)
+  const rejected = results.find((result) => result.status === 'rejected') as PromiseRejectedResult
+  assert.equal(rejected.reason.code, 'SIGNATURE_MISMATCH')
+  const stored = (await repository.getIntent(intent.id))!
+  assert.equal(stored.state, 'finalized')
+  assert.deepEqual(
+    (await repository.getEvents(intent.wallet)).map((event) => event.signature),
+    [stored.signature],
+  )
+  // A same-signature retry after finalization remains idempotent.
+  await reconcileIntent(repository, markets, structuredClone(intent), stored.signature!, chain)
+  assert.equal((await repository.getEvents(intent.wallet)).length, 1)
+})

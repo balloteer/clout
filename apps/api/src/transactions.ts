@@ -1,6 +1,6 @@
 import type { Connection } from '@solana/web3.js'
 import type { BuiltLaunch, BuiltTrade, MarketService, TransactionEnvelope } from '@clout/markets'
-import type { Repository, TransactionIntent } from './domain.js'
+import { ApiError, type Repository, type TransactionIntent } from './domain.js'
 import { isDemoTrade } from './demo-activity.js'
 
 export async function reconcileIntent(
@@ -14,7 +14,11 @@ export async function reconcileIntent(
     intent.kind === 'trade'
       ? await markets.reconcileTrade({ signature, trade: intent.envelope as unknown as BuiltTrade })
       : await markets.reconcile({ signature, transaction: intent.envelope as unknown as TransactionEnvelope })
-  await repository.updateIntent(intent.id, result.status, signature)
+  if (!(await repository.updateIntent(intent.id, result.status, signature))) {
+    const stored = await repository.getIntent(intent.id)
+    if (!stored || stored.signature !== signature || stored.state !== 'finalized')
+      throw new ApiError(409, 'SIGNATURE_MISMATCH', 'This request already tracks another signature.')
+  }
   if (result.status === 'failed' || result.status === 'expired')
     await repository.reconcile(signature, 'dropped')
   if (result.status !== 'confirmed') return result

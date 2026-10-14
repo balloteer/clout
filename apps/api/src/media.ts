@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ApiError } from './domain.js'
 import { isXVideoUrl } from './linked-provider.js'
 
@@ -23,6 +24,7 @@ export function verifyStreamWebhook(
 }
 export interface MediaService {
   issueUpload(input: { postId: string; wallet: string }): Promise<{ uid: string; uploadUrl: string }>
+  handleRequest?(request: IncomingMessage, response: ServerResponse): Promise<boolean>
   copyVideo?(input: {
     postId: string
     wallet: string

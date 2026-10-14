@@ -60,7 +60,20 @@ export type Portfolio = {
   positions: {
     post: ApiPost
     amount: string
-    sellQuote: { expectedAmountOut: string; outputDecimals: number } | null
+    baseDecimals: number
+    sellQuote: {
+      expectedAmountOut: string
+      minimumAmountOut: string
+      inputDecimals: number
+      outputDecimals: number
+    } | null
+    boughtQuoteAmount: string
+    soldQuoteAmount: string
+    netInvestedQuoteAmount: string | null
+    backingAvailable: boolean
+    performanceAvailable: boolean
+    profitLossQuoteAmount: string | null
+    returnBps: string | null
     earlyBacker: boolean
   }[]
   events: {

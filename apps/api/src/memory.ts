@@ -11,6 +11,7 @@ import {
   type IndexedEvent,
   type Post,
   type PostSummary,
+  type PositionHistory,
   type Profile,
   type Repository,
   type Session,
@@ -118,7 +119,8 @@ export class MemoryRepository implements Repository {
   ) {
     const post = [...this.posts.values()].find((post) => post.streamUid === uid)
     if (!post) return false
-    if (post.status !== 'processing') return true // Replayed callbacks cannot regress a terminal state.
+    if (post.status !== 'processing')
+      return post.status === status && post.videoUrl === videoUrl && post.thumbnailUrl === thumbnailUrl // Exact callback replays succeed without changing a terminal state.
     Object.assign(post, { status, videoUrl, thumbnailUrl })
     return true
   }
@@ -344,6 +346,25 @@ export class MemoryRepository implements Repository {
   async getEvents(wallet: string) {
     return [...this.events.values()].filter((event) => event.wallet === wallet)
   }
+  async getPositionHistory(wallet: string): Promise<PositionHistory[]> {
+    const totals = new Map<string, PositionHistory>()
+    for (const event of this.events.values()) {
+      if (event.wallet !== wallet) continue
+      const total = totals.get(event.postId) ?? {
+        postId: event.postId,
+        boughtBaseAmount: '0',
+        soldBaseAmount: '0',
+        boughtQuoteAmount: '0',
+        soldQuoteAmount: '0',
+      }
+      const baseKey = event.kind === 'buy' ? 'boughtBaseAmount' : 'soldBaseAmount'
+      const quoteKey = event.kind === 'buy' ? 'boughtQuoteAmount' : 'soldQuoteAmount'
+      total[baseKey] = (BigInt(total[baseKey]) + BigInt(event.baseAmount)).toString()
+      total[quoteKey] = (BigInt(total[quoteKey]) + BigInt(event.quoteAmount)).toString()
+      totals.set(event.postId, total)
+    }
+    return [...totals.values()]
+  }
   async getPostEvents(postId: string) {
     return [...this.events.values()]
       .filter((event) => event.postId === postId)
@@ -384,8 +405,10 @@ export class MemoryRepository implements Repository {
   }
   async updateIntent(id: string, state: TransactionIntent['state'], signature: string | null) {
     const intent = this.intents.get(id)
-    if (intent && (!intent.signature || intent.signature === signature) && intent.state !== 'finalized')
-      Object.assign(intent, { state, signature })
+    if (!intent || (intent.signature && intent.signature !== signature) || intent.state === 'finalized')
+      return false
+    Object.assign(intent, { state, signature })
+    return true
   }
   async attachMarket(postId: string, market: NonNullable<Post['market']>) {
     const post = this.posts.get(postId)

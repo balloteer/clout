@@ -13,6 +13,17 @@ export function displayAtomic(value: string, decimals: number, precision = 4): s
   const fraction = (raw % base).toString().padStart(decimals, '0').slice(0, precision).replace(/0+$/, '')
   return `${raw / base}${fraction ? `.${fraction}` : ''}`
 }
+export function displaySignedAtomic(value: string, decimals: number, precision = 4): string {
+  const raw = BigInt(value)
+  return `${raw > 0n ? '+' : raw < 0n ? '−' : ''}${displayAtomic((raw < 0n ? -raw : raw).toString(), decimals, precision)}`
+}
+export function displayBps(value: string): string {
+  const raw = BigInt(value)
+  const absolute = raw < 0n ? -raw : raw
+  const whole = absolute / 100n
+  const fraction = (absolute % 100n).toString().padStart(2, '0').replace(/0+$/, '')
+  return `${raw > 0n ? '+' : raw < 0n ? '−' : ''}${whole}${fraction ? `.${fraction}` : ''}%`
+}
 export function isQuoteExpired(expiresAt: string, now = Date.now()): boolean {
   const expiry = Date.parse(expiresAt)
   return !Number.isFinite(expiry) || expiry <= now

@@ -7,9 +7,10 @@ import { postJson } from '../lib/api'
 import { colors as c, fonts } from '../lib/theme'
 import { Button, Icon, Txt } from '../components/ui'
 import { FeedVideo, type PlaybackStatus } from '../components/feed-video'
+import { uploadPickedVideo } from '../lib/uploads'
 export function Create({ onConnect }: { onConnect: () => void }) {
   const wallet = useWallet()
-  const { notify } = useApp()
+  const { notify, refresh } = useApp()
   const [asset, setAsset] = useState<ImagePicker.ImagePickerAsset | null>(null)
   const [caption, setCaption] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,6 +43,10 @@ export function Create({ onConnect }: { onConnect: () => void }) {
       })
       if (!result.canceled) {
         const selected = result.assets[0]
+        if (selected.fileSize && selected.fileSize > 128 * 1024 * 1024) {
+          notify('Choose a video smaller than 128 MB.')
+          return
+        }
         if (selected.duration && selected.duration > 60_000) {
           notify('Choose a video that is 60 seconds or shorter.')
           return
@@ -59,27 +64,17 @@ export function Create({ onConnect }: { onConnect: () => void }) {
       onConnect()
       return
     }
-    if (!asset || !caption.trim()) return
+    if (!asset || !caption.trim() || previewStatus === 'error') return
     setBusy(true)
     try {
       const result = await postJson<{ uploadUrl: string; postId: string }>('/v1/uploads', {
         caption: caption.trim(),
         maxDurationSeconds: 60,
       })
-      const form = new FormData()
-      if (Platform.OS === 'web') {
-        const blob = await fetch(asset.uri).then((r) => r.blob())
-        form.append('file', blob, asset.fileName ?? 'clout.mp4')
-      } else
-        form.append('file', {
-          uri: asset.uri,
-          type: asset.mimeType ?? 'video/mp4',
-          name: asset.fileName ?? 'clout.mp4',
-        } as unknown as Blob)
-      const response = await fetch(result.uploadUrl, { method: 'POST', body: form })
-      if (!response.ok) throw new Error('The upload did not finish. Please try again.')
+      await uploadPickedVideo(result.uploadUrl, asset)
       setPublished(true)
-      notify('Video uploaded. It will appear after processing.')
+      await refresh()
+      notify('Video posted.')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Upload failed')
     } finally {
@@ -169,11 +164,15 @@ export function Create({ onConnect }: { onConnect: () => void }) {
         {!compact && <Txt style={s.note}>Post first. Launch a market later.</Txt>}
         <Button
           onPress={() => void publish()}
-          disabled={busy || published || (!!wallet.address && (!asset || !caption.trim()))}
+          disabled={
+            busy ||
+            published ||
+            (!!wallet.address && (!asset || !caption.trim() || previewStatus === 'error'))
+          }
           icon={published ? 'checkmark-circle' : 'arrow-up-circle-outline'}
         >
           {published
-            ? 'Uploaded · processing'
+            ? 'Posted'
             : busy
               ? 'Uploading…'
               : wallet.address

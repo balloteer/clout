@@ -32,8 +32,8 @@ For a reproducible isolated Android toolchain, APK builds, and emulator setup, s
 - Seeker-only wallet routing on Android and web, challenge signature verification, single-use nonces, hashed server sessions, secure mobile session storage. Runtime services are devnet-only; mainnet `.skr`/SGT services are disabled in this alpha.
 - SKR-quoted Meteora DBC and DAMM v2 adapters: launch, quote, buy, sell, fees, explicit migration steps, checked SKR tips, devnet validation, simulation, and message-bound confirmation.
 - Signed transaction recovery persisted **before** broadcast, one pending transaction per wallet, duplicate-intent guards, and background reconciliation of submitted API intents.
-- Real wallet holdings and sell quotes when connected, collection receipts, creator actions, and a Supabase-compatible Postgres schema with row-level access policies.
-- Cloudflare direct uploads and authenticated processing webhooks. Uploading and market launch are separate actions.
+- Real wallet holdings, amount backed, current sell value and total return when connected. Investments lead Collection and appear directly on Profile; sale presets cannot exceed the held post tokens.
+- Cloudflare direct uploads and authenticated processing webhooks, plus a loopback-only streaming uploader for the USB Seeker preview. Uploading and market launch are separate actions.
 - A daily mock-SKR faucet: 1,000 SKR per wallet per UTC day, resetting at 00:00 UTC, with verified devnet mint authority, atomic database reservations, durable signed recovery and finalized receipts. It stays disabled until persistent storage is configured. SGT-based rewards are unavailable in this devnet-only alpha.
 - Profile linking for up to three combined external accounts, with secure X authorization, pause/resume/disconnect and automatic owned-video imports. X/Cloudflare credentials are required; Fomo remains unavailable until its exact service and API are identified.
 - Small Early alpha · Devnet notices throughout the phone and desktop navigation.
