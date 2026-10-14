@@ -8,6 +8,27 @@ const prefix = '/v1/samples/media/'
 const allowedFiles = new Set(sampleContent.flatMap((post) => [post.videoFile, post.posterFile]))
 const mediaDirectory = new URL('../../mobile/assets/media/', import.meta.url)
 
+/** Old seeded rows keep their original URLs; only our bundled loopback assets move with the API. */
+export function rebaseLoopbackSampleMedia(value: string | null, origin: string): string | null {
+  if (value === null) return value
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return value
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    !url.pathname.startsWith(prefix) ||
+    !allowedFiles.has(url.pathname.slice(prefix.length))
+  )
+    return value
+  return new URL(`${url.pathname}${url.search}${url.hash}`, origin).href
+}
+
 /** Single HTTP byte ranges are enough for Android/HTML video seeking. */
 export function sampleByteRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/.exec(header)

@@ -64,6 +64,71 @@ async function fixture(
   }
 }
 
+test('connected presentation rebases stored bundled loopback URLs without changing stored content', async () => {
+  const originalVideo = 'http://127.0.0.1:8787/v1/samples/media/sample-001.mp4'
+  const originalPoster = 'http://localhost:8787/v1/samples/media/sample-001.jpg'
+  const app = await fixture(undefined, async (repository) => {
+    const post = repository.posts.get('big-buck-bunny')!
+    post.videoUrl = originalVideo
+    post.thumbnailUrl = originalPoster
+    return { mode: 'connected' }
+  })
+  try {
+    const single = await app.request('/v1/posts/big-buck-bunny')
+    const feed = await app.request('/v1/feed')
+    for (const post of [
+      single.data,
+      feed.data.posts.find((post: { id: string }) => post.id === 'big-buck-bunny'),
+    ]) {
+      assert.equal(post.videoUrl, 'https://clout.example/v1/samples/media/sample-001.mp4')
+      assert.equal(post.thumbnailUrl, 'https://clout.example/v1/samples/media/sample-001.jpg')
+    }
+    assert.equal(app.repository.posts.get('big-buck-bunny')!.videoUrl, originalVideo)
+    assert.equal(app.repository.posts.get('big-buck-bunny')!.thumbnailUrl, originalPoster)
+  } finally {
+    await app.close()
+  }
+})
+
+test('trusted proxy clients have separate rate limits and forged prefixes cannot reset a bucket', async () => {
+  const app = await fixture(undefined, async () => ({ trustProxyHops: 1 }))
+  try {
+    assert.equal((await app.request('/health')).status, 400)
+    for (let i = 0; i < 180; i++)
+      assert.equal(
+        (await app.request('/health', { headers: { 'X-Forwarded-For': '198.51.100.7' } })).status,
+        200,
+      )
+    assert.equal(
+      (await app.request('/health', { headers: { 'X-Forwarded-For': '203.0.113.1, 198.51.100.7' } })).status,
+      429,
+    )
+    assert.equal(
+      (await app.request('/health', { headers: { 'X-Forwarded-For': '198.51.100.8' } })).status,
+      200,
+    )
+  } finally {
+    await app.close()
+  }
+})
+
+test('default rate limiting ignores arbitrary forwarding headers', async () => {
+  const app = await fixture()
+  try {
+    for (let i = 0; i < 180; i++)
+      assert.equal(
+        (await app.request('/health', { headers: { 'X-Forwarded-For': `198.51.100.${i + 1}` } })).status,
+        200,
+      )
+    assert.equal(
+      (await app.request('/health', { headers: { 'X-Forwarded-For': '203.0.113.200' } })).status,
+      429,
+    )
+  } finally {
+    await app.close()
+  }
+})
+
 test('public video activity separates a live pool balance from an empty recorded history', async () => {
   let reads = 0
   const app = await fixture(

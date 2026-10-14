@@ -25,7 +25,8 @@ import type { IdentityResolver } from './identity.js'
 import { publicClaim, type RewardService } from './rewards.js'
 import { linkedUnavailable, type LinkedAccountService } from './linked-accounts.js'
 import { unavailableFaucet, type FaucetService } from './faucet.js'
-import { handleSampleMedia } from './sample-media.js'
+import { handleSampleMedia, rebaseLoopbackSampleMedia } from './sample-media.js'
+import { parseTrustProxyHops, requestClientIp } from './request-ip.js'
 import { investmentHistory, MarketMetrics } from './market-metrics.js'
 import { isDemoActivityEvent } from './demo-activity.js'
 import { positionPerformance } from './portfolio.js'
@@ -35,6 +36,7 @@ export interface AppOptions {
   origin: string
   mode: 'demo' | 'connected'
   allowedOrigins?: string[]
+  trustProxyHops?: number
   media?: MediaService
   webhookSecret?: string
   seeker?: SeekerVerifier
@@ -84,6 +86,7 @@ class RateLimiter {
 
 export function createApp(options: AppOptions) {
   const { repository } = options
+  const trustProxyHops = parseTrustProxyHops(options.trustProxyHops?.toString())
   const auth = new AuthService(repository, options.origin)
   const limiter = new RateLimiter()
   const metrics = new MarketMetrics({
@@ -145,11 +148,11 @@ export function createApp(options: AppOptions) {
     videoUrl:
       post.videoUrl?.startsWith('/v1/samples/media/') || post.videoUrl?.startsWith('/v1/local-media/')
         ? new URL(post.videoUrl, options.origin).toString()
-        : post.videoUrl,
+        : rebaseLoopbackSampleMedia(post.videoUrl, options.origin),
     thumbnailUrl:
       post.thumbnailUrl?.startsWith('/v1/samples/media/') || post.thumbnailUrl?.startsWith('/v1/local-media/')
         ? new URL(post.thumbnailUrl, options.origin).toString()
-        : post.thumbnailUrl,
+        : rebaseLoopbackSampleMedia(post.thumbnailUrl, options.origin),
     creator: summary ? summary.creator : await repository.getProfile(post.creatorWallet),
     likes: summary ? summary.likes : await repository.likes(post.id, wallet),
     commentCount: summary ? summary.commentCount : (await repository.listComments(post.id)).length,
@@ -207,7 +210,7 @@ export function createApp(options: AppOptions) {
       const url = new URL(request.url ?? '/', options.origin)
       const route = url.pathname
       const method = request.method ?? 'GET'
-      const key = request.socket.remoteAddress ?? 'unknown'
+      const key = requestClientIp(request, trustProxyHops)
       limiter.check(key, 180)
       if (await handleSampleMedia(request, response)) return
       if (options.media?.handleRequest && (await options.media.handleRequest(request, response))) return

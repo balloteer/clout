@@ -2,8 +2,39 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
-import { handleSampleMedia, sampleByteRange } from '../src/sample-media.js'
+import { handleSampleMedia, rebaseLoopbackSampleMedia, sampleByteRange } from '../src/sample-media.js'
 import { sampleContent } from '../../../packages/shared/src/sample-content.js'
+
+test('loopback bundled videos and posters follow the configured public API origin', () => {
+  for (const host of ['http://127.0.0.1:8787', 'http://localhost:8080', 'https://[::1]:8787']) {
+    for (const extension of ['mp4', 'jpg']) {
+      const path = `/v1/samples/media/sample-001.${extension}?version=1#preview`
+      assert.equal(
+        rebaseLoopbackSampleMedia(`${host}${path}`, 'https://api.clout.example'),
+        `https://api.clout.example${path}`,
+      )
+    }
+  }
+})
+
+test('rebasing preserves external media, user uploads, unknown files and malformed URLs', () => {
+  for (const value of [
+    null,
+    'https://video.twimg.com/clip.mp4',
+    'https://cdn.example/v1/samples/media/sample-001.mp4',
+    'http://localhost.evil.example/v1/samples/media/sample-001.mp4',
+    'http://localhost@evil.example/v1/samples/media/sample-001.mp4',
+    'http://user:password@localhost/v1/samples/media/sample-001.mp4',
+    'http://127.0.0.1:8787/v1/local-media/upload.mp4',
+    'http://127.0.0.1:8787/v1/samples/media/sample-051.mp4',
+    'http://127.0.0.1:8787/v1/samples/media/sample-001%2emp4',
+    'http://127.0.0.1:8787/v1/samples/media/../../private.mp4',
+    'file:///v1/samples/media/sample-001.mp4',
+    '//localhost/v1/samples/media/sample-001.mp4',
+    'not a URL',
+  ])
+    assert.equal(rebaseLoopbackSampleMedia(value, 'https://api.clout.example'), value)
+})
 
 test('sample catalog has 50 distinct video/poster files and nonoverlapping source intervals', () => {
   assert.equal(sampleContent.length, 50)
