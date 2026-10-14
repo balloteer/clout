@@ -35,6 +35,9 @@ export class PostgresRepository implements Repository {
     }
     this.sql = postgres(url, options)
   }
+  async healthCheck() {
+    await this.sql`select 1`
+  }
   async putChallenge(challenge: Challenge) {
     await this
       .sql`insert into private.wallet_challenges (id, address, message, expires_at) values (${challenge.id}, ${challenge.address}, ${challenge.message}, ${new Date(challenge.expiresAt)})`

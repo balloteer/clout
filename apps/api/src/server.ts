@@ -187,19 +187,21 @@ const reconciliationTimer =
       }, 15000)
     : undefined
 reconciliationTimer?.unref()
-let recoveringUploads = false
+let uploadRecoveryPromise: Promise<void> | undefined
 let uploadRecoveryCursor: { createdAt: string; id: string } | undefined
-const recoverUploads = async () => {
-  if (recoveringUploads || !media?.inspectVideo) return
-  recoveringUploads = true
-  try {
-    const result = await reconcilePendingUploads(repository, media, 25, uploadRecoveryCursor)
-    uploadRecoveryCursor = result.next
-  } catch {
-    console.error('Video upload recovery temporarily unavailable.')
-  } finally {
-    recoveringUploads = false
-  }
+const recoverUploads = () => {
+  if (uploadRecoveryPromise || !media?.inspectVideo) return uploadRecoveryPromise ?? Promise.resolve()
+  uploadRecoveryPromise = (async () => {
+    try {
+      const result = await reconcilePendingUploads(repository, media, 25, uploadRecoveryCursor)
+      uploadRecoveryCursor = result.next
+    } catch {
+      console.error('Video upload recovery temporarily unavailable.')
+    } finally {
+      uploadRecoveryPromise = undefined
+    }
+  })()
+  return uploadRecoveryPromise
 }
 void recoverUploads()
 const uploadRecoveryTimer = media?.inspectVideo ? setInterval(() => void recoverUploads(), 60_000) : undefined
@@ -230,13 +232,20 @@ server.listen(port, host, () =>
     `Clout API listening on http://${host}:${port} (${connected ? 'connected devnet' : 'sample feed; markets disabled'})`,
   ),
 )
+let shuttingDown = false
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.on(signal, () => {
+    if (shuttingDown) return
+    shuttingDown = true
     clearInterval(reconciliationTimer)
     clearInterval(uploadRecoveryTimer)
     clearInterval(importTimer)
     clearInterval(faucetTimer)
     server.close(() => {
-      void repository.close().then(() => process.exit(0))
+      void (async () => {
+        await uploadRecoveryPromise
+        await repository.close()
+        process.exit(0)
+      })()
     })
   })

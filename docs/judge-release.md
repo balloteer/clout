@@ -6,7 +6,7 @@ The current `clout-preview.apk` is a USB preview. A judge-ready APK must point a
 
 1. Create a Railway service from the repository's `main` branch. Keep the service root at `/` because the API imports the shared `packages/markets` workspace and the root lockfile.
 2. Generate a public domain under **Settings → Networking**. Railway detects the root `Dockerfile`; if it does not, set `RAILWAY_DOCKERFILE_PATH=/Dockerfile`.
-3. Set the healthcheck path to `/live`, timeout to 300 seconds, and restart policy to **On Failure** with 10 retries. The container already starts the API and listens on Railway's injected `PORT` at `0.0.0.0`.
+3. Set the healthcheck path to `/ready`, timeout to 300 seconds, and restart policy to **On Failure** with 10 retries. The container already starts the API and listens on Railway's injected `PORT` at `0.0.0.0`. Readiness fails if the database cannot answer.
 4. Add the variables below. Seal database, RPC-provider, Cloudflare, OAuth, encryption, webhook and authority credentials. Do not paste any of them into build arguments, repository files, Expo variables or logs.
 
 Railway's legacy `railway.json` configuration is intentionally omitted. Railway deprecated Config as Code for new services and recommends dashboard settings or its Infrastructure as Code workflow. The checked Dockerfile remains the portable runtime definition.
@@ -20,8 +20,6 @@ HOST=0.0.0.0
 CLOUT_ORIGIN=https://${{RAILWAY_PUBLIC_DOMAIN}}
 CLOUT_ALLOWED_ORIGINS=https://${{RAILWAY_PUBLIC_DOMAIN}}
 CLOUT_TRUST_PROXY_HOPS=0
-ANDROID_APP_PACKAGE=app.clout.mobile
-ANDROID_APP_SHA256_CERT_FINGERPRINT=<APK signing certificate SHA-256 fingerprint>
 DATABASE_URL=<sealed Supabase server pooler URL>
 SOLANA_DEVNET_RPC_URL=<sealed devnet RPC URL>
 SKR_DEVNET_MINT=8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC
@@ -52,7 +50,7 @@ The authority must control the configured mock mint and have enough devnet SOL f
 LOCAL_UPLOADS_ENABLED=false
 CLOUDFLARE_ACCOUNT_ID=<account ID>
 CLOUDFLARE_STREAM_API_TOKEN=<sealed Stream-scoped token>
-CLOUDFLARE_STREAM_WEBHOOK_SECRET=<sealed random webhook secret>
+CLOUDFLARE_STREAM_WEBHOOK_SECRET=<signing secret returned by the webhook API>
 ```
 
 Configure Cloudflare Stream to send signed callbacks to:
@@ -60,6 +58,8 @@ Configure Cloudflare Stream to send signed callbacks to:
 ```text
 https://${{RAILWAY_PUBLIC_DOMAIN}}/v1/webhooks/stream
 ```
+
+Register that URL with `PUT /accounts/<ACCOUNT_ID>/stream/webhook`, then copy the response's `result.secret` into `CLOUDFLARE_STREAM_WEBHOOK_SECRET`. Updating the webhook URL rotates the secret, so update the Railway variable after every webhook change.
 
 Local uploads are intentionally refused in production. Linked X accounts additionally require `LINKED_ACCOUNTS_ENABLED=true`, X OAuth credentials, and a stable sealed `LINKED_ACCOUNTS_ENCRYPTION_KEY`. Leave linked accounts disabled for the judge build unless the complete provider flow has been exercised. Fomo remains unavailable.
 
@@ -70,12 +70,11 @@ Run these read-only checks against the generated domain:
 ```sh
 export CLOUT_API_URL="https://YOUR-SERVICE.up.railway.app"
 curl --fail --silent --show-error "$CLOUT_API_URL/live"
+curl --fail --silent --show-error "$CLOUT_API_URL/ready"
 curl --fail --silent --show-error "$CLOUT_API_URL/v1/config"
 ```
 
-`/live` must return `{"status":"ok"}`. `/v1/config` must report `mode: connected` and `network: devnet`. Before building the APK, confirm that `features.trading` and `features.faucet` are `true`; confirm `features.uploads` is `true` only after Cloudflare is configured. Exercise a feed request separately because liveness and configuration do not prove database readiness.
-
-Also verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and the exact certificate fingerprint reported by `apksigner verify --print-certs`. The API origin can then be used as the Mobile Wallet Adapter identity URI without deploying a second website.
+`/live` must return `{"status":"ok"}`, `/ready` must return `{"status":"ready"}`, and `/v1/config` must report `mode: connected` and `network: devnet`. Before building the APK, confirm that `features.trading` and `features.faucet` are `true`; confirm `features.uploads` is `true` only after Cloudflare is configured. Exercise a feed request separately because a database connection does not prove the seeded catalog is present.
 
 ## 3. Build and install the portable APK
 
@@ -83,11 +82,21 @@ Also verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and the ex
 EXPO_PUBLIC_APP_IDENTITY_URI="$CLOUT_API_URL" \
   CLOUT_PREVIEW_API_URL="$CLOUT_API_URL" \
   bash scripts/build-android-preview.sh
-bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk
 shasum -a 256 artifacts/clout-preview.apk
+bash scripts/android-env.sh .tooling/android-sdk/build-tools/36.0.0/apksigner \
+  verify --print-certs artifacts/clout-preview.apk
 ```
 
-Confirm the APK bundle contains the HTTPS hostname and does not contain `127.0.0.1:8787`. Do not set `CLOUT_PREVIEW_USB=1`. The preview remains debug-signed; use a permanent production keystore for a dApp Store release.
+Take the SHA-256 certificate fingerprint from `apksigner`, then add these Railway variables and redeploy the same API:
+
+```dotenv
+ANDROID_APP_PACKAGE=app.clout.mobile
+ANDROID_APP_SHA256_CERT_FINGERPRINT=<exact fingerprint from the judge APK>
+```
+
+Verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and that exact fingerprint, then install the already-built APK with `bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk`. The API origin is now the Mobile Wallet Adapter identity URI without a second website.
+
+Confirm the APK bundle contains the HTTPS hostname and does not contain `127.0.0.1:8787`. Do not set `CLOUT_PREVIEW_USB=1`. The script refuses a connected portable build without the matching HTTPS identity origin. The preview remains signed by this machine's current debug key; retain this exact APK for judging and use a permanent production keystore for a dApp Store release.
 
 ## 4. Judge acceptance on the exact APK
 

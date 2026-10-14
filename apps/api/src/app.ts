@@ -96,6 +96,25 @@ export function createApp(options: AppOptions) {
     quoteMint: options.quoteMint,
     decimals: options.quoteDecimals ?? 6,
   })
+  let readinessPromise: Promise<boolean> | undefined
+  let readinessValue = false
+  let readinessExpiresAt = 0
+  const repositoryReady = async () => {
+    if (Date.now() < readinessExpiresAt) return readinessValue
+    readinessPromise ??= repository
+      .healthCheck()
+      .then(() => true)
+      .catch(() => false)
+      .then((ready) => {
+        readinessValue = ready
+        readinessExpiresAt = Date.now() + 5_000
+        return ready
+      })
+      .finally(() => {
+        readinessPromise = undefined
+      })
+    return readinessPromise
+  }
   const marketService = () => {
     if (!options.markets)
       throw new ApiError(503, 'MARKETS_UNAVAILABLE', 'Test SKR markets are not configured yet.')
@@ -215,6 +234,12 @@ export function createApp(options: AppOptions) {
       // A container-local liveness probe must not depend on the external proxy chain.
       if (method === 'GET' && route === '/live') {
         send(200, { status: 'ok' })
+        return
+      }
+      if (method === 'GET' && route === '/ready') {
+        if (!(await repositoryReady()))
+          throw new ApiError(503, 'DATABASE_UNAVAILABLE', 'Database is temporarily unavailable.')
+        send(200, { status: 'ready' })
         return
       }
       const key = requestClientIp(request, trustProxyHops)

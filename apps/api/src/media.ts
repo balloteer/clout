@@ -31,9 +31,12 @@ export interface MediaService {
     importId: string
     url: string
   }): Promise<{ uid: string }>
-  inspectVideo?(
-    uid: string,
-  ): Promise<{ readyToStream: boolean; status: { state: string }; duration?: number }>
+  inspectVideo?(uid: string): Promise<{
+    readyToStream: boolean
+    status: { state: string }
+    duration?: number
+    uploadExpiry?: string
+  }>
 }
 
 export async function reconcilePendingUploads(
@@ -59,7 +62,12 @@ export async function reconcilePendingUploads(
           )
         )
           updated++
-      } else if (video.status.state === 'error') {
+      } else if (
+        video.status.state === 'error' ||
+        (video.status.state === 'pendingupload' &&
+          !!video.uploadExpiry &&
+          Date.parse(video.uploadExpiry) <= Date.now())
+      ) {
         if (await repository.updateStream(post.streamUid, 'failed', null, null)) updated++
       }
     } catch {
@@ -138,7 +146,12 @@ export class CloudflareMedia implements MediaService {
     )
     const body = (await response.json()) as {
       success?: boolean
-      result?: { readyToStream: boolean; status: { state: string }; duration?: number }
+      result?: {
+        readyToStream: boolean
+        status: { state: string }
+        duration?: number
+        uploadExpiry?: string
+      }
     }
     if (!response.ok || !body.success || !body.result?.status)
       throw new ApiError(

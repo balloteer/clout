@@ -13,8 +13,20 @@ if [[ "$CLOUT_PREVIEW_USB" == "1" ]]; then
   echo "Building USB preview: keep the Mac API and adb reverse tcp:8787 tcp:8787 running."
 elif [[ "$CLOUT_PREVIEW_USB" == "0" ]]; then
   export EXPO_PUBLIC_API_URL="${CLOUT_PREVIEW_API_URL:-}"
-  if [[ -n "$EXPO_PUBLIC_API_URL" && "$EXPO_PUBLIC_API_URL" != https://* ]]; then
+  if [[ -z "$EXPO_PUBLIC_API_URL" ]]; then
+    echo "A portable build requires CLOUT_PREVIEW_API_URL; use CLOUT_PREVIEW_USB=1 for USB testing." >&2
+    exit 1
+  fi
+  if [[ "$EXPO_PUBLIC_API_URL" != https://* ]]; then
     echo "CLOUT_PREVIEW_API_URL must use HTTPS; use CLOUT_PREVIEW_USB=1 for USB testing." >&2
+    exit 1
+  fi
+  if [[ "${EXPO_PUBLIC_APP_IDENTITY_URI:-}" != https://* ]]; then
+    echo "A connected portable build requires an HTTPS EXPO_PUBLIC_APP_IDENTITY_URI." >&2
+    exit 1
+  fi
+  if [[ "${EXPO_PUBLIC_APP_IDENTITY_URI%/}" != "${EXPO_PUBLIC_API_URL%/}" ]]; then
+    echo "The judge build requires the wallet identity URI to match its public API origin." >&2
     exit 1
   fi
 else

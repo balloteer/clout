@@ -132,6 +132,7 @@ export interface TransactionIntent {
   createdAt: string
 }
 export interface Repository {
+  healthCheck(): Promise<void>
   putChallenge(challenge: Challenge): Promise<void>
   consumeChallenge(id: string, now: number): Promise<Challenge | null>
   putSession(session: Session): Promise<void>

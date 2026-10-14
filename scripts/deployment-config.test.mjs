@@ -16,7 +16,7 @@ test('production image is scoped to the API and runs as an unprivileged user', a
   assert.match(dockerfile, /--workspace @clout\/markets/)
   assert.match(dockerfile, /--workspace @clout\/shared/)
   assert.match(dockerfile, /USER node/)
-  assert.match(dockerfile, /\/live/)
+  assert.match(dockerfile, /\/ready/)
   assert.match(dockerfile, /WORKDIR \/app\/apps\/api/)
   assert.match(dockerfile, /CLOUT_TRUST_PROXY_HOPS=0/)
   assert.match(dockerfile, /COPY apps\/mobile\/assets\/media apps\/mobile\/assets\/media/)
@@ -45,6 +45,11 @@ test('production handoff keeps secrets as placeholders and documents the portabl
   assert.match(example, /# CLOUT_ORIGIN=https:\/\/\$\{RAILWAY_PUBLIC_DOMAIN\}/)
   assert.match(runbook, /EXPO_PUBLIC_APP_IDENTITY_URI="\$CLOUT_API_URL"/)
   assert.match(runbook, /CLOUT_PREVIEW_API_URL="\$CLOUT_API_URL"/)
+  assert.match(runbook, /ANDROID_APP_SHA256_CERT_FINGERPRINT=<exact fingerprint from the judge APK>/)
+  const buildScript = await read('scripts/build-android-preview.sh')
+  assert.match(buildScript, /portable build requires CLOUT_PREVIEW_API_URL/)
+  assert.match(buildScript, /connected portable build requires an HTTPS EXPO_PUBLIC_APP_IDENTITY_URI/)
+  assert.match(buildScript, /wallet identity URI to match its public API origin/)
   assert.match(runbook, /127\.0\.0\.1:8787/)
   assert.match(
     example,

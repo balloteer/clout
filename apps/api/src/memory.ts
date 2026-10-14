@@ -45,6 +45,7 @@ export class MemoryRepository implements Repository {
       for (const post of demoPosts) this.posts.set(post.id, structuredClone(post))
     }
   }
+  async healthCheck() {}
   async putChallenge(challenge: Challenge) {
     for (const [key, value] of this.challenges) if (value.expiresAt < Date.now()) this.challenges.delete(key)
     if (this.challenges.size >= 10000) throw new ApiError(429, 'BUSY', 'Try again shortly.')

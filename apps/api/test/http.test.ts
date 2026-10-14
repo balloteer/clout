@@ -283,7 +283,29 @@ test('container liveness does not depend on an external proxy forwarding chain',
     const live = await app.request('/live')
     assert.equal(live.status, 200)
     assert.deepEqual(live.data, { status: 'ok' })
+    const ready = await app.request('/ready')
+    assert.equal(ready.status, 200)
+    assert.deepEqual(ready.data, { status: 'ready' })
     assert.equal((await app.request('/v1/config')).status, 400)
+  } finally {
+    await app.close()
+  }
+})
+
+test('readiness fails closed and bounds repeated database probes', async () => {
+  let checks = 0
+  const app = await fixture(undefined, async (repository) => {
+    repository.healthCheck = async () => {
+      checks++
+      throw new Error('offline')
+    }
+    return {}
+  })
+  try {
+    assert.equal((await app.request('/live')).status, 200)
+    assert.equal((await app.request('/ready')).status, 503)
+    assert.equal((await app.request('/ready')).status, 503)
+    assert.equal(checks, 1)
   } finally {
     await app.close()
   }

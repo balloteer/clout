@@ -82,6 +82,21 @@ test('upload recovery leaves in-progress encoding unchanged', async () => {
   assert.equal((await repository.getPost(post.id))?.status, 'processing')
 })
 
+test('upload recovery fails an abandoned direct upload after its URL expires', async () => {
+  const repository = new MemoryRepository(false)
+  const post = processingPost('a')
+  await repository.insertPost(post)
+  const result = await reconcilePendingUploads(repository, {
+    inspectVideo: async () => ({
+      readyToStream: false,
+      status: { state: 'pendingupload' },
+      uploadExpiry: '2025-12-31T23:59:59Z',
+    }),
+  })
+  assert.deepEqual(result, { checked: 1, updated: 1, next: undefined })
+  assert.equal((await repository.getPost(post.id))?.status, 'failed')
+})
+
 test('upload recovery cursor prevents an old in-progress upload from starving later rows', async () => {
   const repository = new MemoryRepository(false)
   const first = processingPost('a')
