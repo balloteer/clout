@@ -40,7 +40,10 @@ test('production handoff keeps secrets as placeholders and documents the portabl
   assert.match(example, /# NODE_ENV=production/)
   assert.match(example, /# HOST=0\.0\.0\.0/)
   assert.match(example, /# CLOUT_TRUST_PROXY_HOPS=0/)
+  assert.match(example, /# ANDROID_APP_PACKAGE=app\.clout\.mobile/)
+  assert.match(example, /# ANDROID_APP_SHA256_CERT_FINGERPRINT=/)
   assert.match(example, /# CLOUT_ORIGIN=https:\/\/\$\{RAILWAY_PUBLIC_DOMAIN\}/)
+  assert.match(runbook, /EXPO_PUBLIC_APP_IDENTITY_URI="\$CLOUT_API_URL"/)
   assert.match(runbook, /CLOUT_PREVIEW_API_URL="\$CLOUT_API_URL"/)
   assert.match(runbook, /127\.0\.0\.1:8787/)
   assert.match(

@@ -11,6 +11,8 @@ import { LinkedAccountService } from './linked-accounts.js'
 import { PostgresLinkedStore } from './linked-store.js'
 import { TokenVault, XProvider } from './linked-provider.js'
 import { FaucetService } from './faucet.js'
+import { parseTrustProxyHops } from './request-ip.js'
+import { parseAndroidAppIdentity } from './app-identity.js'
 
 const env = process.env
 const connected = env.CLOUT_MODE === 'connected'
@@ -207,6 +209,11 @@ const { server } = createApp({
   origin,
   mode: connected ? 'connected' : 'demo',
   allowedOrigins,
+  trustProxyHops: parseTrustProxyHops(env.CLOUT_TRUST_PROXY_HOPS),
+  androidAppIdentity: parseAndroidAppIdentity(
+    env.ANDROID_APP_SHA256_CERT_FINGERPRINT,
+    env.ANDROID_APP_PACKAGE,
+  ),
   markets,
   media,
   linkedAccounts,

@@ -20,6 +20,8 @@ HOST=0.0.0.0
 CLOUT_ORIGIN=https://${{RAILWAY_PUBLIC_DOMAIN}}
 CLOUT_ALLOWED_ORIGINS=https://${{RAILWAY_PUBLIC_DOMAIN}}
 CLOUT_TRUST_PROXY_HOPS=0
+ANDROID_APP_PACKAGE=app.clout.mobile
+ANDROID_APP_SHA256_CERT_FINGERPRINT=<APK signing certificate SHA-256 fingerprint>
 DATABASE_URL=<sealed Supabase server pooler URL>
 SOLANA_DEVNET_RPC_URL=<sealed devnet RPC URL>
 SKR_DEVNET_MINT=8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC
@@ -73,10 +75,14 @@ curl --fail --silent --show-error "$CLOUT_API_URL/v1/config"
 
 Both responses must report `mode: connected` and `network: devnet`. Before building the APK, confirm that `features.trading` and `features.faucet` are `true`; confirm `features.uploads` is `true` only after Cloudflare is configured. A 200 health response proves the process is serving its configured runtime. Exercise a feed/database request separately because `/health` is a liveness check.
 
+Also verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and the exact certificate fingerprint reported by `apksigner verify --print-certs`. The API origin can then be used as the Mobile Wallet Adapter identity URI without deploying a second website.
+
 ## 3. Build and install the portable APK
 
 ```sh
-CLOUT_PREVIEW_API_URL="$CLOUT_API_URL" bash scripts/build-android-preview.sh
+EXPO_PUBLIC_APP_IDENTITY_URI="$CLOUT_API_URL" \
+  CLOUT_PREVIEW_API_URL="$CLOUT_API_URL" \
+  bash scripts/build-android-preview.sh
 bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk
 shasum -a 256 artifacts/clout-preview.apk
 ```

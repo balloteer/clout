@@ -30,6 +30,7 @@ import { parseTrustProxyHops, requestClientIp } from './request-ip.js'
 import { investmentHistory, MarketMetrics } from './market-metrics.js'
 import { isDemoActivityEvent } from './demo-activity.js'
 import { positionPerformance } from './portfolio.js'
+import { androidAssetLinks, type AndroidAppIdentity } from './app-identity.js'
 
 export interface AppOptions {
   repository: Repository
@@ -48,6 +49,7 @@ export interface AppOptions {
   quoteDecimals?: number
   linkedAccounts?: LinkedAccountService
   faucet?: FaucetService
+  androidAppIdentity?: AndroidAppIdentity
 }
 const text = (value: unknown, name: string, max = 280): string => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > max)
@@ -212,6 +214,18 @@ export function createApp(options: AppOptions) {
       const method = request.method ?? 'GET'
       const key = requestClientIp(request, trustProxyHops)
       limiter.check(key, 180)
+      if (
+        (method === 'GET' || method === 'HEAD') &&
+        route === '/.well-known/assetlinks.json' &&
+        options.androidAppIdentity
+      ) {
+        response.setHeader('Cache-Control', 'public, max-age=3600')
+        response.statusCode = 200
+        response.end(
+          method === 'HEAD' ? undefined : JSON.stringify(androidAssetLinks(options.androidAppIdentity)),
+        )
+        return
+      }
       if (await handleSampleMedia(request, response)) return
       if (options.media?.handleRequest && (await options.media.handleRequest(request, response))) return
       if (route.startsWith('/v1/auth/')) limiter.check(`auth:${key}`, 20)

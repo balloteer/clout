@@ -253,6 +253,30 @@ test('HTTP feed, wallet sign-in, idempotent likes, comments, following and logou
   }
 })
 
+test('serves Android Digital Asset Links for the configured judge APK', async () => {
+  const fingerprint =
+    'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C'
+  const app = await fixture(undefined, async () => ({
+    androidAppIdentity: { packageName: 'app.clout.mobile', sha256CertFingerprint: fingerprint },
+  }))
+  try {
+    const response = await app.request('/.well-known/assetlinks.json')
+    assert.equal(response.status, 200)
+    assert.deepEqual(response.data, [
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'app.clout.mobile',
+          sha256_cert_fingerprints: [fingerprint],
+        },
+      },
+    ])
+  } finally {
+    await app.close()
+  }
+})
+
 test('HTTP feed and discover hydrate the visible batch without per-post creator requests', async () => {
   const batches: string[][] = []
   const app = await fixture(undefined, async (repository) => {
