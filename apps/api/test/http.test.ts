@@ -1015,3 +1015,68 @@ test('launch retries preserve canonical name and reject changed metadata', async
     await app.close()
   }
 })
+
+test('Storage upload completion is owner-only, exposes PUT contract and is idempotent after publication', async () => {
+  const uid = 'supabase:1791979200000:' + 'a'.repeat(32)
+  let inspected = 0
+  let ready = false
+  const app = await fixture(undefined, async () => ({
+    media: {
+      issueUpload: async () => ({
+        uid,
+        uploadUrl: 'https://storage.example/one?token=opaque',
+        uploadMethod: 'PUT',
+        uploadHeaders: { 'x-upsert': 'false' },
+        maxBytes: 52428800,
+        requiresCompletion: true,
+      }),
+      inspectVideo: async () => {
+        inspected++
+        return ready
+          ? {
+              readyToStream: true,
+              status: { state: 'ready' },
+              videoUrl: 'https://storage.example/public/video.mp4',
+              thumbnailUrl: null,
+            }
+          : { readyToStream: false, status: { state: 'pendingupload' }, uploadExpiry: '2099-01-01T00:00:00Z' }
+      },
+    },
+  }))
+  try {
+    const owner = await app.login()
+    const other = await app.login()
+    const issued = await app.request('/v1/uploads', {
+      method: 'POST',
+      headers: owner.headers,
+      body: JSON.stringify({ caption: 'My video' }),
+    })
+    assert.equal(issued.status, 201)
+    assert.equal(issued.data.uploadMethod, 'PUT')
+    assert.equal(issued.data.maxBytes, 52428800)
+    assert.deepEqual(issued.data.uploadHeaders, { 'x-upsert': 'false' })
+    const route = issued.data.completeUrl
+    assert.equal(route, `/v1/uploads/${issued.data.postId}/complete`)
+    assert.equal((await app.request(route, { method: 'POST', body: '{}' })).status, 401)
+    assert.equal(
+      (await app.request(route, { method: 'POST', headers: other.headers, body: '{}' })).status,
+      404,
+    )
+    assert.equal(inspected, 0)
+    assert.equal(
+      (await app.request(route, { method: 'POST', headers: owner.headers, body: '{}' })).status,
+      202,
+    )
+    ready = true
+    const completed = await app.request(route, { method: 'POST', headers: owner.headers, body: '{}' })
+    assert.equal(completed.status, 200)
+    assert.equal(completed.data.status, 'ready')
+    assert.equal(completed.data.post.videoUrl, 'https://storage.example/public/video.mp4')
+    assert.equal(completed.data.post.thumbnailUrl, null)
+    const retried = await app.request(route, { method: 'POST', headers: owner.headers, body: '{}' })
+    assert.equal(retried.data.status, 'ready')
+    assert.equal(inspected, 2, 'already published completion never repeats storage writes')
+  } finally {
+    await app.close()
+  }
+})

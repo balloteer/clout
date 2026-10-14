@@ -26,7 +26,7 @@ export class LinkedAccountService {
     private media: MediaService,
     private origin: string,
   ) {
-    if (!media.copyVideo) throw new Error('Linked imports require Cloudflare Stream copy support.')
+    if (!media.copyVideo) throw new Error('Linked imports require durable video copy support.')
   }
   async list(wallet: string) {
     return {
@@ -213,6 +213,9 @@ export class LinkedAccountService {
             await this.webhook(
               { ...video, meta: { importId: job.id, postId: job.post.id, creator: job.wallet } },
               job.streamUid!,
+              video.videoUrl
+                ? { videoUrl: video.videoUrl, thumbnailUrl: video.thumbnailUrl ?? null }
+                : undefined,
             )
           }
         if (!jobs.some((job) => job.state === 'queued')) {
@@ -316,7 +319,11 @@ export class LinkedAccountService {
     return { checked, failed }
   }
   // Called only after the existing Cloudflare signature check. It can recover a lost copy response.
-  async webhook(input: Record<string, unknown>, uid: string): Promise<boolean> {
+  async webhook(
+    input: Record<string, unknown>,
+    uid: string,
+    verifiedMedia?: { videoUrl: string; thumbnailUrl: string | null },
+  ): Promise<boolean> {
     const meta = input.meta as Record<string, unknown> | undefined
     const referenced =
       meta && typeof meta.importId === 'string' ? await this.store.getJob(meta.importId) : null
@@ -332,8 +339,13 @@ export class LinkedAccountService {
       await this.repository.updateStream(
         uid,
         valid ? 'ready' : 'failed',
-        valid ? `https://videodelivery.net/${uid}/manifest/video.m3u8` : null,
-        valid ? `https://videodelivery.net/${uid}/thumbnails/thumbnail.jpg` : null,
+        valid ? (verifiedMedia?.videoUrl ?? `https://videodelivery.net/${uid}/manifest/video.m3u8`) : null,
+        valid
+          ? (verifiedMedia?.thumbnailUrl ??
+              (/^[a-f0-9]{32}$/.test(uid)
+                ? `https://videodelivery.net/${uid}/thumbnails/thumbnail.jpg`
+                : null))
+          : null,
       )
       await this.store.finish(job.id, valid ? 'ready' : 'failed')
     } else if (status?.state === 'error') {

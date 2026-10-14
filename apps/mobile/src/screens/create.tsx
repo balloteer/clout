@@ -3,11 +3,21 @@ import { Keyboard, Platform, Pressable, StyleSheet, TextInput, View } from 'reac
 import * as ImagePicker from 'expo-image-picker'
 import { useWallet } from '../lib/wallet'
 import { useApp } from '../lib/store'
-import { postJson } from '../lib/api'
+import { api, postJson } from '../lib/api'
 import { colors as c, fonts } from '../lib/theme'
 import { Button, Icon, Txt } from '../components/ui'
 import { FeedVideo, type PlaybackStatus } from '../components/feed-video'
 import { uploadPickedVideo } from '../lib/uploads'
+import {
+  assertUploadSize,
+  resolveCompleteUrl,
+  resolveCompletionStatus,
+  resolveMaxBytes,
+  resolveUploadHeaders,
+  resolveUploadMethod,
+  UPLOAD_COMPLETION_TIMEOUT_MS,
+  UPLOAD_MAX_VIDEO_BYTES,
+} from '../lib/upload-result'
 export function Create({ onConnect }: { onConnect: () => void }) {
   const wallet = useWallet()
   const { notify, refresh } = useApp()
@@ -43,8 +53,8 @@ export function Create({ onConnect }: { onConnect: () => void }) {
       })
       if (!result.canceled) {
         const selected = result.assets[0]
-        if (selected.fileSize && selected.fileSize > 128 * 1024 * 1024) {
-          notify('Choose a video smaller than 128 MB.')
+        if (selected.fileSize && selected.fileSize > UPLOAD_MAX_VIDEO_BYTES) {
+          notify('Choose a video no larger than 50 MB.')
           return
         }
         if (selected.duration && selected.duration > 60_000) {
@@ -67,14 +77,38 @@ export function Create({ onConnect }: { onConnect: () => void }) {
     if (!asset || !caption.trim() || previewStatus === 'error') return
     setBusy(true)
     try {
-      const result = await postJson<{ uploadUrl: string; postId: string }>('/v1/uploads', {
+      const result = await postJson<{
+        uploadUrl: string
+        postId: string
+        uploadMethod?: unknown
+        uploadHeaders?: unknown
+        maxBytes?: unknown
+        completeUrl?: unknown
+      }>('/v1/uploads', {
         caption: caption.trim(),
         maxDurationSeconds: 60,
       })
-      await uploadPickedVideo(result.uploadUrl, asset)
+      const method = resolveUploadMethod(result.uploadMethod)
+      const headers = resolveUploadHeaders(result.uploadHeaders)
+      assertUploadSize(asset.fileSize, resolveMaxBytes(result.maxBytes))
+      const completeUrl = resolveCompleteUrl(result.completeUrl)
+      await uploadPickedVideo(result.uploadUrl, asset, method, headers)
+      // The signed upload is single-use. Disable resubmission before completion so a timeout
+      // cannot create a second post while durable recovery finishes the first one.
       setPublished(true)
+      const completionStatus = completeUrl
+        ? resolveCompletionStatus(
+            (
+              await api<{ status: unknown }>(completeUrl, {
+                method: 'POST',
+                body: '{}',
+                signal: AbortSignal.timeout(UPLOAD_COMPLETION_TIMEOUT_MS),
+              })
+            ).status,
+          )
+        : 'ready'
       await refresh()
-      notify('Video posted.')
+      notify(completionStatus === 'ready' ? 'Video posted.' : 'Video uploaded. Processing now.')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Upload failed')
     } finally {

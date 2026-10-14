@@ -18,7 +18,7 @@ bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk
 
 Public API, RPC and wallet-identity environment values are bundled at build time. The build script disables dotenv loading so a browser's `.env.local` cannot silently change the APK. By default its API is blank: 50 bundled samples play offline and the 12 active curated videos require internet. Connected services require an API. Use `CLOUT_PREVIEW_API_URL=https://your-api.example bash scripts/build-android-preview.sh` for a reachable HTTPS API. Rebuild after changing public environment values.
 
-The current artifact is a **USB-connected preview**, version **0.1.6 (7)**. It contains the repaired Seeker wallet connection, a visible Profile SKR balance and per-post investments, 80 verified mock-SKR markets (62 active posts and 18 archived picks), reviewed portrait videos, a current market SKR balance and recorded investment chart, pinned trade approval, loopback MP4 uploads, sound enabled by default, Markets filtering, native vertical paging and the daily faucet UI. Reproduce it with:
+The current artifact is a **portable judge preview**, version **0.1.7 (8)**. It contains the repaired Seeker wallet connection, a visible Profile SKR balance and per-post investments, 80 verified mock-SKR markets (62 active posts and 18 archived picks), reviewed portrait videos, a current market SKR balance and recorded investment chart, pinned trade approval, direct Supabase Storage uploads, sound enabled by default, Markets filtering, native vertical paging and the daily faucet UI. Reproduce it with:
 
 ```bash
 CLOUT_PREVIEW_USB=1 bash scripts/build-android-preview.sh

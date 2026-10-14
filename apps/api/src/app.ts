@@ -18,7 +18,7 @@ import {
   type Repository,
   type TransactionIntent,
 } from './domain.js'
-import { type MediaService, verifyStreamWebhook } from './media.js'
+import { type MediaService, reconcileUpload, verifyStreamWebhook } from './media.js'
 import type { SeekerVerifier } from './seeker.js'
 import { reconcileIntent } from './transactions.js'
 import type { IdentityResolver } from './identity.js'
@@ -608,7 +608,34 @@ export function createApp(options: AppOptions) {
           market: null,
         }
         await repository.insertPost(post)
-        send(201, { post, postId: post.id, uploadUrl: upload.uploadUrl })
+        send(201, {
+          post,
+          postId: post.id,
+          uploadUrl: upload.uploadUrl,
+          uploadMethod: upload.uploadMethod ?? 'POST',
+          uploadHeaders: upload.uploadHeaders,
+          maxBytes: upload.maxBytes,
+          completeUrl: upload.requiresCompletion ? `/v1/uploads/${post.id}/complete` : undefined,
+        })
+        return
+      }
+      const completeUpload = /^\/v1\/uploads\/([^/]+)\/complete$/.exec(route)
+      if (method === 'POST' && completeUpload) {
+        const wallet = requireWallet()
+        const post = await repository.getPost(completeUpload[1])
+        if (!post || post.creatorWallet !== wallet || !post.streamUid || post.source)
+          throw new ApiError(404, 'UPLOAD_NOT_FOUND', 'Upload request not found.')
+        if (post.status === 'processing') {
+          if (!options.media?.inspectVideo)
+            throw new ApiError(503, 'UPLOADS_UNAVAILABLE', 'Video processing is not configured yet.')
+          await reconcileUpload(repository, options.media, post.streamUid)
+        }
+        const current = (await repository.getPost(post.id))!
+        send(current.status === 'processing' ? 202 : 200, {
+          post: await presentPost(current, wallet),
+          postId: current.id,
+          status: current.status,
+        })
         return
       }
       if (method === 'POST' && route === '/v1/webhooks/stream') {

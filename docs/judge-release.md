@@ -1,6 +1,6 @@
 # Judge release runbook
 
-The current `clout-preview.apk` is a USB preview. A judge-ready APK must point at a public HTTPS API. Vercel builds the repository's `Dockerfile.vercel` as an autoscaling container Function; Supabase remains the durable database and Cloudflare Stream remains the durable video service.
+The judge APK points at a public HTTPS API. Vercel builds the repository's `Dockerfile.vercel` as an autoscaling container Function; Supabase provides the durable database and video storage.
 
 ## 1. Deploy the API on Vercel
 
@@ -27,7 +27,7 @@ MAINTENANCE_SECRET=<one stable 64-character hexadecimal secret>
 
 Generate `MAINTENANCE_SECRET` once with `openssl rand -hex 32`. Store the exact same value in Vercel and the Cloudflare recovery Worker. Set `DATABASE_URL`, `SOLANA_DEVNET_RPC_URL`, `MAINTENANCE_SECRET` and `FAUCET_MINT_AUTHORITY_SECRET_BASE64` to the **Secret** type. `DATABASE_URL` must use the Supabase server-side session/shared pooler on port 5432, with special characters in the password percent-encoded. The API uses a bounded connection pool and the pinned public Supabase CA.
 
-Apply `supabase/migrations/20261013090000_upload_recovery_checks.sql` before enabling the recovery Worker. The safe helper is `node --env-file=apps/api/.env.local scripts/db-upload-recovery.mjs --apply`; it pins the existing Supabase project and verifies the private grants afterward. The migration adds the private fair-scheduling table used to rotate Stream checks across pending uploads.
+Apply `supabase/migrations/20261013090000_upload_recovery_checks.sql` before enabling the recovery Worker. The safe helper is `node --env-file=apps/api/.env.local scripts/db-upload-recovery.mjs --apply`; it pins the existing Supabase project and verifies the private grants afterward. Also apply `supabase/migrations/20261014034917_supabase_video_storage.sql`; it creates the restricted private staging bucket and public playback bucket. The recovery table rotates checks across pending uploads.
 
 ### Required for the daily mock SKR faucet
 
@@ -42,36 +42,24 @@ FAUCET_MINT_AUTHORITY_SECRET_BASE64=<sealed 64-byte devnet authority key in base
 
 The authority must control the configured mock mint and have enough devnet SOL for transaction fees and recipient token-account rent. Keep the campaign ID and supply ceiling stable across redeploys. Never reuse a mainnet key.
 
-## 2. Configure Cloudflare Stream
+## 2. Configure Supabase Storage
 
-Enable Stream and create an account token scoped to **Stream Write**. Add these values to the Vercel Production environment, then redeploy:
+In the same Supabase project used by `DATABASE_URL`, open **Project Settings → API Keys** and create or copy a server-only secret key. Add these values to the Vercel Production environment, then redeploy:
 
 ```dotenv
-CLOUDFLARE_ACCOUNT_ID=<account ID>
-CLOUDFLARE_STREAM_API_TOKEN=<sealed Stream-scoped token>
-CLOUDFLARE_STREAM_WEBHOOK_SECRET=<signing secret returned by the webhook API>
+SUPABASE_URL=https://qsboauxywnuhitlpmojw.supabase.co
+SUPABASE_SECRET_KEY=<sealed server-only secret key>
+SUPABASE_UPLOAD_BUCKET=clout-upload-staging
+SUPABASE_VIDEO_BUCKET=clout-videos
 ```
 
-Set all three values to Vercel's **Secret** type. Register the production callback URL with this exact API request:
-
-```sh
-export CLOUT_API_URL="https://YOUR-PROJECT.vercel.app"
-curl --fail --silent --show-error \
-  --request PUT \
-  --header "Authorization: Bearer $CLOUDFLARE_STREAM_API_TOKEN" \
-  --header "Content-Type: application/json" \
-  --data "{\"notificationUrl\":\"$CLOUT_API_URL/v1/webhooks/stream\"}" \
-  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/stream/webhook" \
-  > /tmp/clout-stream-webhook.json
-```
-
-Read `/tmp/clout-stream-webhook.json` locally and copy its `result.secret` into the Vercel Secret `CLOUDFLARE_STREAM_WEBHOOK_SECRET`, then delete that temporary file. Updating the webhook URL rotates the secret, so update the Vercel variable and redeploy after every webhook change. Video bytes upload directly from the phone to Cloudflare's signed upload URL; they do not cross Vercel's Function request-body boundary.
+Set the key to Vercel's **Secret** type. The API creates a single-object signed URL; video bytes upload directly from the phone to Supabase and do not cross Vercel's request-body boundary. The server validates the private MP4 before publishing its stable public URL. Do not expose the secret key through Expo variables or the APK.
 
 Local uploads are refused in production. Linked X accounts additionally require `LINKED_ACCOUNTS_ENABLED=true`, X OAuth credentials and a stable sealed `LINKED_ACCOUNTS_ENCRYPTION_KEY`. Leave linked accounts disabled for the judge build unless the complete provider flow has been exercised. Fomo remains unavailable.
 
 ## 3. Deploy the Cloudflare recovery Worker
 
-Vercel containers scale to zero, so in-process timers are not the durable scheduler. The checked `workers/recovery-worker` calls the API's secret-protected, idempotent recovery endpoint once per minute. It reconciles pending devnet transactions, faucet mints, Stream uploads and enabled account imports.
+Vercel containers scale to zero, so in-process timers are not the durable scheduler. The checked `workers/recovery-worker` calls the API's secret-protected, idempotent recovery endpoint once per minute. It reconciles pending devnet transactions, faucet mints, Storage uploads and enabled account imports.
 
 ```sh
 cd workers/recovery-worker
@@ -132,7 +120,7 @@ Confirm the APK bundle contains the HTTPS hostname and does not contain `127.0.0
 - Open a video market, buy, approve in the wallet, wait for finalization, and confirm the new balance and position in both Profile and Collection.
 - Sell 25% and confirm the UI never offers more than the held post-token balance.
 - Cancel one wallet approval, retry safely, restart during a pending transaction, and recover the same intent without creating a duplicate.
-- Upload a portrait MP4, wait for Cloudflare processing, open it from Profile, launch its market, and then invest.
+- Upload a portrait MP4 no larger than 50 MiB, wait for Storage validation, open it from Profile, launch its market, and then invest.
 - Record an uninterrupted walkthrough and retain the APK SHA-256, release commit, public API URL and devnet explorer links with the submission.
 
 The repository's `artifacts/` directory is ignored. Upload the APK and walkthrough separately or attach them to a release; a repository clone does not contain those files.

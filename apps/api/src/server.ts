@@ -3,7 +3,8 @@ import { Connection } from '@solana/web3.js'
 import { createApp } from './app.js'
 import { MemoryRepository } from './memory.js'
 import { PostgresRepository } from './postgres.js'
-import { CloudflareMedia, reconcilePendingUploads, type MediaService } from './media.js'
+import { reconcilePendingUploads, type MediaService } from './media.js'
+import { SupabaseMedia } from './supabase-media.js'
 import { LocalMedia } from './local-media.js'
 import { fileURLToPath } from 'node:url'
 import { reconcilePending } from './transactions.js'
@@ -46,17 +47,13 @@ const markets = tradingConfigured
     )
   : undefined
 let media: MediaService | undefined
-if (
-  connected &&
-  env.CLOUDFLARE_ACCOUNT_ID &&
-  env.CLOUDFLARE_STREAM_API_TOKEN &&
-  env.CLOUDFLARE_STREAM_WEBHOOK_SECRET
-)
-  media = new CloudflareMedia(
-    env.CLOUDFLARE_ACCOUNT_ID,
-    env.CLOUDFLARE_STREAM_API_TOKEN,
-    allowedOrigins.map((value) => new URL(value).hostname),
-  )
+if (connected && env.SUPABASE_URL && (env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY))
+  media = new SupabaseMedia({
+    url: env.SUPABASE_URL,
+    secretKey: (env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY)!,
+    stagingBucket: env.SUPABASE_UPLOAD_BUCKET,
+    publicBucket: env.SUPABASE_VIDEO_BUCKET,
+  })
 else if (env.LOCAL_UPLOADS_ENABLED === 'true') {
   const host = new URL(origin).hostname
   if (env.NODE_ENV === 'production' || !['127.0.0.1', 'localhost', '[::1]'].includes(host))
@@ -78,7 +75,7 @@ if (env.LINKED_ACCOUNTS_ENABLED === 'true') {
     !env.LINKED_ACCOUNTS_ENCRYPTION_KEY
   )
     throw new Error(
-      'Linked accounts require persistent storage, X OAuth credentials, token encryption and Cloudflare Stream.',
+      'Linked accounts require persistent storage, X OAuth credentials, token encryption and durable video storage.',
     )
   linkedAccounts = new LinkedAccountService(
     new PostgresLinkedStore(repository.sql),
@@ -254,7 +251,9 @@ const runMaintenance = () => {
       jobs.push([
         'uploads',
         async () => {
-          const result = await reconcilePendingUploads(repository, media, 10, undefined, true)
+          // A Storage reconciliation may stream and validate a 50 MiB video. Keep each
+          // one-minute platform invocation bounded to one concurrent batch.
+          const result = await reconcilePendingUploads(repository, media, 3, undefined, true)
           if (result.failed) throw new Error('Upload recovery was incomplete.')
         },
       ])

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Clout",
     "slug": "clout",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "scheme": "clout",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -13,7 +13,7 @@
         "foregroundImage": "./assets/brand/icon.png",
         "backgroundColor": "#FF3D8B"
       },
-      "versionCode": 7
+      "versionCode": 8
     },
     "web": {
       "bundler": "metro",

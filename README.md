@@ -23,7 +23,7 @@ To connect the app to the API, copy `apps/mobile/.env.example` to `apps/mobile/.
 npm run android
 ```
 
-For a reproducible isolated Android toolchain, APK builds, and emulator setup, see [docs/android.md](docs/android.md). Device access to a local API requires `adb reverse tcp:8787 tcp:8787` over USB or a reachable HTTPS API URL. The [judge release runbook](docs/judge-release.md) covers the Vercel container, Cloudflare Stream and recovery Worker, hosted environment contract and portable APK acceptance.
+For a reproducible isolated Android toolchain, APK builds, and emulator setup, see [docs/android.md](docs/android.md). Device access to a local API requires `adb reverse tcp:8787 tcp:8787` over USB or a reachable HTTPS API URL. The [judge release runbook](docs/judge-release.md) covers the Vercel container, Supabase Storage, the recovery Worker, hosted environment contract and portable APK acceptance.
 
 ## What is implemented
 
@@ -33,9 +33,9 @@ For a reproducible isolated Android toolchain, APK builds, and emulator setup, s
 - SKR-quoted Meteora DBC and DAMM v2 adapters: launch, quote, buy, sell, fees, explicit migration steps, checked SKR tips, devnet validation, simulation, and message-bound confirmation.
 - Signed transaction recovery persisted **before** broadcast, one pending transaction per wallet, duplicate-intent guards, and background reconciliation of submitted API intents.
 - Real wallet holdings, amount backed, current sell value and total return when connected. Investments lead Collection and appear directly on Profile; sale presets cannot exceed the held post tokens.
-- Cloudflare direct uploads and authenticated processing webhooks, plus a loopback-only streaming uploader for the USB Seeker preview. Uploading and market launch are separate actions.
+- Object-scoped Supabase Storage uploads with private MP4 validation and immutable public playback, plus a loopback-only streaming uploader for the USB Seeker preview. Uploading and market launch are separate actions.
 - A daily mock-SKR faucet: 1,000 SKR per wallet per UTC day, resetting at 00:00 UTC, with verified devnet mint authority, atomic database reservations, durable signed recovery and finalized receipts. It stays disabled until persistent storage is configured. SGT-based rewards are unavailable in this devnet-only alpha.
-- Profile linking for up to three combined external accounts, with secure X authorization, pause/resume/disconnect and automatic owned-video imports. X/Cloudflare credentials are required; Fomo remains unavailable until its exact service and API are identified.
+- Profile linking for up to three combined external accounts, with secure X authorization, pause/resume/disconnect and automatic owned-video imports. X credentials and Supabase Storage are required; Fomo remains unavailable until its exact service and API are identified.
 - Small Early alpha · Devnet notices throughout the phone and desktop navigation.
 - The eye opens [Video investments](docs/investments.md): current Mock SKR in the market, a recorded backing graph above buy/sell controls, and explicit empty, unavailable and stale states. Current pool reserves and net flow across the latest 100 Clout trades are labeled separately; neither is a fabricated return or the viewer's personal balance. The 12 portrait markets have 72 finalized operator transactions (54 buys and 18 partial sells), explicitly labeled **Seeded demo activity** with verified trade and wallet counts.
 
@@ -63,7 +63,7 @@ The browser check covers desktop, 400×890 Seeker proportions, and short phone l
 
 ## Delivery gates
 
-See [docs/acceptance.md](docs/acceptance.md) for verified checks and remaining release work. Separate live devnet rehearsals finalized buys, sells, graduation to DAMM v2, creator fee claims and a mock-SKR tip using isolated task wallets. The checked Vercel container and Cloudflare Stream/recovery Worker still need account deployment, followed by app-to-API recovery and physical trade testing. Supabase project `qsboauxywnuhitlpmojw` is connected: all four migrations are verified, 80 posts with 80 distinct markets are stored, with 62 visible in the active feed, and the local API has trading and the daily faucet enabled. The app preserves source attribution and uses reviewed portrait footage to fill the Seeker frame. Profile shows the live SKR balance above its stats. The owner confirmed physical Seeker login and a 1,000 mock SKR mint. Credentials stay in ignored local environment files. Provider imports remain disabled until their services are configured. See [devnet setup](docs/devnet-alpha.md).
+See [docs/acceptance.md](docs/acceptance.md) for verified checks and remaining release work. Separate live devnet rehearsals finalized buys, sells, graduation to DAMM v2, creator fee claims and a mock-SKR tip using isolated task wallets. The Vercel API and recovery Worker are deployed; the Supabase Storage migration and a physical hosted-upload rehearsal remain release gates. Supabase project `qsboauxywnuhitlpmojw` is connected: the existing migrations are verified, 80 posts with 80 distinct markets are stored, with 62 visible in the active feed, and the production API has trading and the daily faucet enabled. The app preserves source attribution and uses reviewed portrait footage to fill the Seeker frame. Profile shows the live SKR balance above its stats. The owner confirmed physical Seeker login and a 1,000 mock SKR mint. Credentials stay in ignored local environment files. Provider imports remain disabled until their services are configured. See [devnet setup](docs/devnet-alpha.md).
 
 The upstream native and Meteora dependencies currently contain npm audit advisories. Do not force incompatible SDK downgrades to silence the report. Recheck and resolve or explicitly assess those advisories before release; this branch is not represented as production-ready.
 

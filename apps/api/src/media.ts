@@ -23,7 +23,14 @@ export function verifyStreamWebhook(
   )
 }
 export interface MediaService {
-  issueUpload(input: { postId: string; wallet: string }): Promise<{ uid: string; uploadUrl: string }>
+  issueUpload(input: { postId: string; wallet: string }): Promise<{
+    uid: string
+    uploadUrl: string
+    uploadMethod?: 'POST' | 'PUT'
+    uploadHeaders?: Record<string, string>
+    maxBytes?: number
+    requiresCompletion?: boolean
+  }>
   handleRequest?(request: IncomingMessage, response: ServerResponse): Promise<boolean>
   copyVideo?(input: {
     postId: string
@@ -36,7 +43,39 @@ export interface MediaService {
     status: { state: string }
     duration?: number
     uploadExpiry?: string
+    videoUrl?: string
+    thumbnailUrl?: string | null
   }>
+}
+
+export async function reconcileUpload(
+  repository: Repository,
+  media: Pick<MediaService, 'inspectVideo'>,
+  uid: string,
+) {
+  if (!media.inspectVideo) return false
+  const video = await media.inspectVideo(uid)
+  if (video.status.state === 'ready' && video.readyToStream) {
+    // Only legacy Stream IDs can use the old URL construction. Storage publishes its verified URL.
+    const legacy = /^[a-f0-9]{32}$/.test(uid)
+    const videoUrl =
+      video.videoUrl ?? (legacy ? `https://videodelivery.net/${uid}/manifest/video.m3u8` : null)
+    if (!videoUrl) throw new Error('Ready media is missing its verified playback URL.')
+    return repository.updateStream(
+      uid,
+      'ready',
+      videoUrl,
+      video.thumbnailUrl ?? (legacy ? `https://videodelivery.net/${uid}/thumbnails/thumbnail.jpg` : null),
+    )
+  }
+  if (
+    video.status.state === 'error' ||
+    (video.status.state === 'pendingupload' &&
+      !!video.uploadExpiry &&
+      Date.parse(video.uploadExpiry) <= Date.now())
+  )
+    return repository.updateStream(uid, 'failed', null, null)
+  return false
 }
 
 export async function reconcilePendingUploads(
@@ -53,30 +92,12 @@ export async function reconcilePendingUploads(
     : await repository.listProcessingUploads(limit, after)
   let updated = 0
   let failed = 0
-  for (let start = 0; start < posts.length; start += 5)
+  for (let start = 0; start < posts.length; start += 3)
     await Promise.all(
-      posts.slice(start, start + 5).map(async (post) => {
+      posts.slice(start, start + 3).map(async (post) => {
         if (!post.streamUid) return
         try {
-          const video = await inspectVideo(post.streamUid)
-          if (video.status.state === 'ready' && video.readyToStream) {
-            if (
-              await repository.updateStream(
-                post.streamUid,
-                'ready',
-                `https://videodelivery.net/${post.streamUid}/manifest/video.m3u8`,
-                `https://videodelivery.net/${post.streamUid}/thumbnails/thumbnail.jpg`,
-              )
-            )
-              updated++
-          } else if (
-            video.status.state === 'error' ||
-            (video.status.state === 'pendingupload' &&
-              !!video.uploadExpiry &&
-              Date.parse(video.uploadExpiry) <= Date.now())
-          ) {
-            if (await repository.updateStream(post.streamUid, 'failed', null, null)) updated++
-          }
+          if (await reconcileUpload(repository, media, post.streamUid)) updated++
         } catch {
           // A transient Stream read must not prevent the remaining durable uploads from recovering.
           failed++

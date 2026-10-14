@@ -40,7 +40,7 @@ The helper verifies devnet genesis, all catalog finalized receipts, quote mint, 
 
 Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env.local` to the API reachable by the device and restart Metro/rebuild the APK. For USB local development, use `http://127.0.0.1:8787` with `adb reverse tcp:8787 tcp:8787`. Native Android uses Mobile Wallet Adapter pinned to the Seeker wallet. Android browser sign-in uses Seeker Connect, also pinned to that wallet; desktop previews remain read-only. See [Seeker wallet setup](seeker-wallet.md), including the browser relay terms.
 
-X automatic imports also require X OAuth/API configuration, a token-encryption key and Cloudflare Stream credentials. Profile permits at most three combined accounts. Fomo is intentionally unavailable until the specific app and its supported authorization/import API are known. No actual external account was linked during tests.
+X automatic imports also require X OAuth/API configuration, a token-encryption key and the configured Supabase Storage buckets. Profile permits at most three combined accounts. Fomo is intentionally unavailable until the specific app and its supported authorization/import API are known. No actual external account was linked during tests.
 
 ## Reproduce chain preparation
 
