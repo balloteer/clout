@@ -200,7 +200,7 @@ function WalletFaucet({ onConnect }: { onConnect: () => void }) {
           <View style={{ gap: 4 }}>
             <Txt style={s.small}>Receiving Seeker wallet</Txt>
             <Txt selectable numberOfLines={1} ellipsizeMode="middle" style={s.address}>
-              {wallet.address}
+              {wallet.name ?? wallet.address}
             </Txt>
           </View>
         )}

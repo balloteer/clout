@@ -752,7 +752,7 @@ function presentComment(item: ApiComment) {
   return {
     id: item.id,
     name: item.creator?.handle ?? address,
-    address,
+    address: item.creator?.handle ? '' : address,
     text: item.body,
     backer: item.earlyBacker === true,
   }

@@ -18,17 +18,18 @@ bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk
 
 Public API, RPC and wallet-identity environment values are bundled at build time. The build script disables dotenv loading so a browser's `.env.local` cannot silently change the APK. By default its API is blank: 50 bundled samples play offline and the 12 active curated videos require internet. Connected services require an API. Use `CLOUT_PREVIEW_API_URL=https://your-api.example bash scripts/build-android-preview.sh` for a reachable HTTPS API. Rebuild after changing public environment values.
 
-The current artifact is a **portable judge preview**, version **0.1.7 (8)**. It contains the repaired Seeker wallet connection, a visible Profile SKR balance and per-post investments, 80 verified mock-SKR markets (62 active posts and 18 archived picks), reviewed portrait videos, a current market SKR balance and recorded investment chart, pinned trade approval, direct Supabase Storage uploads, sound enabled by default, Markets filtering, native vertical paging and the daily faucet UI. Reproduce it with:
+The current artifact is a **portable judge preview**, version **0.1.8 (9)**. It contains the repaired Seeker wallet connection, `.skr` profile names, a visible Profile SKR balance and per-post investments, 80 verified mock-SKR markets (62 active posts and 18 archived picks), reviewed portrait videos, a current market SKR balance and recorded investment chart, pinned trade approval, direct Supabase Storage uploads, sound enabled by default, Markets filtering, native vertical paging and the daily faucet UI. Reproduce it with:
 
 ```bash
-CLOUT_PREVIEW_USB=1 bash scripts/build-android-preview.sh
-bash scripts/android-env.sh adb -s YOUR_SEEKER_SERIAL reverse tcp:8787 tcp:8787
+CLOUT_PREVIEW_API_URL=https://cloutvercel.vercel.app \
+EXPO_PUBLIC_APP_IDENTITY_URI=https://cloutvercel.vercel.app \
+bash scripts/build-android-preview.sh
 bash scripts/android-env.sh adb -s YOUR_SEEKER_SERIAL install -r artifacts/clout-preview.apk
 ```
 
-Keep the Mac API running and the phone connected by USB for live Supabase/trading/faucet requests. This preview embeds `http://127.0.0.1:8787` and explicitly allows cleartext only to that loopback address; all other destinations retain HTTPS requirements. The Expo plugin removes its network policy when the USB flag is disabled. The APK bundles its JavaScript, so Metro is unnecessary. Public hosting remains separate; unplugging USB prevents API-backed features from working.
+The judge preview embeds the production HTTPS API and contains no localhost endpoint, so its Supabase, trading and faucet requests work without Metro, a Mac process or USB forwarding. The Expo plugin removes the development cleartext network policy when the USB flag is disabled.
 
-Latest rebuilt artifact: **2026-10-13**, **0.1.6 (7)**, **94,028,054 bytes**, SHA-256 `cddc8f57f8f07f732102f5cf1dae7fe0d336dfd36a11a489601967dd4e830de7`. APK signature verification and 16 KB ZIP alignment pass. It retains the original preview signing certificate, so `adb install -r` updates the existing app without clearing its data. The connected physical Seeker was updated in place; its installed base APK hash exactly matches the artifact and port 8787 forwarding remains active.
+Latest rebuilt artifact: **2026-10-14**, **0.1.8 (9)**, **94,032,017 bytes**, SHA-256 `bda71cbfc22db60ef0b97cacd9751c6b52f0f8b18117763445c5fdeb37641847`. APK signature verification and 16 KB ZIP alignment pass. It retains the original preview signing certificate, so `adb install -r` updates the existing app without clearing its data.
 
 The owner confirmed physical Seeker login and a 1,000 mock SKR mint on version 0.1.2 (3). The in-place updates preserve app data; version 0.1.6 shows the 980 SKR remainder and two actual held positions with their cumulative backing, executable value and return. Its investment sheet loaded the live 174.072802 SKR reserve, produced a real devnet quote, and kept **Approve in wallet** fully visible at `[75,2421][1125,2571]` after quote expansion. No wallet transaction was approved during this check. Evidence is under `artifacts/native-review/v016-*`. The current connected API independently returns 62 active posts with 62 markets; all 80 registrations remain stored.
 

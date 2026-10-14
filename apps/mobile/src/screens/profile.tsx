@@ -192,11 +192,6 @@ function WalletProfile({ onConnect, onFaucet, onPost, portfolioRevision = 0 }: P
             ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
             : 'Your clout starts here.')}
       </Txt>
-      {wallet.address && (
-        <Txt selectable style={s.small}>
-          {wallet.address.slice(0, 6)}…{wallet.address.slice(-6)}
-        </Txt>
-      )}
       <Txt style={s.bio}>{wallet.address ? 'Your discoveries, backed by your wallet.' : SLOGAN}</Txt>
       {!wallet.address && (
         <Button onPress={onConnect} icon="wallet-outline">

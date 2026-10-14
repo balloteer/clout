@@ -90,7 +90,7 @@ export function SeekerWalletProvider({
     const revision = ++generation.current
     void transport
       .read()
-      .then((raw) => {
+      .then(async (raw) => {
         if (!raw || !active || generation.current !== revision) return
         const stored = JSON.parse(raw) as Stored
         if (stored.policy !== SEEKER_STORAGE_KEY) return
@@ -105,6 +105,33 @@ export function SeekerWalletProvider({
         setAuthorization(auth)
         setSession(restoredSession)
         setSessionToken(restoredSession?.token)
+        if (!restoredSession || !API_URL) return
+        try {
+          const { profile } = await api<{
+            profile: { handle?: string; seekerVerified?: boolean }
+          }>('/v1/me')
+          if (!active || generation.current !== revision) return
+          const refreshedSession: Session = {
+            ...restoredSession,
+            profile: { name: profile.handle, seeker: profile.seekerVerified },
+          }
+          if (
+            refreshedSession.profile.name === restoredSession.profile.name &&
+            refreshedSession.profile.seeker === restoredSession.profile.seeker
+          )
+            return
+          const refreshed: Stored = {
+            policy: SEEKER_STORAGE_KEY,
+            authorization: auth,
+            session: refreshedSession,
+          }
+          await transport.write(JSON.stringify(refreshed))
+          if (!active || generation.current !== revision) return
+          current.current = refreshed
+          setSession(refreshedSession)
+        } catch {
+          /* A stored session remains usable when its display profile cannot refresh. */
+        }
       })
       .catch(() => {
         if (active && generation.current === revision) void transport.clear().catch(() => {})
@@ -136,7 +163,6 @@ export function SeekerWalletProvider({
     )
     return () => clearTimeout(timer)
   }, [session, transport])
-
   async function connect() {
     if (!transport.available)
       throw new Error(transport.unavailableReason ?? 'Open Clout on your Seeker to sign in.')
