@@ -36,3 +36,4 @@ supabase/.temp/
 **/.env.local
 **/.env.local.*.tmp
 **/.env.local.tmp
+**/.dev.vars*

@@ -23,7 +23,7 @@ To connect the app to the API, copy `apps/mobile/.env.example` to `apps/mobile/.
 npm run android
 ```
 
-For a reproducible isolated Android toolchain, APK builds, and emulator setup, see [docs/android.md](docs/android.md). Device access to a local API requires `adb reverse tcp:8787 tcp:8787` over USB or a reachable HTTPS API URL. The [judge release runbook](docs/judge-release.md) covers the credential-free container, Railway settings, hosted environment contract and portable APK acceptance.
+For a reproducible isolated Android toolchain, APK builds, and emulator setup, see [docs/android.md](docs/android.md). Device access to a local API requires `adb reverse tcp:8787 tcp:8787` over USB or a reachable HTTPS API URL. The [judge release runbook](docs/judge-release.md) covers the Vercel container, Cloudflare Stream and recovery Worker, hosted environment contract and portable APK acceptance.
 
 ## What is implemented
 
@@ -63,7 +63,7 @@ The browser check covers desktop, 400×890 Seeker proportions, and short phone l
 
 ## Delivery gates
 
-See [docs/acceptance.md](docs/acceptance.md) for verified checks and remaining release work. Separate live devnet rehearsals finalized buys, sells, graduation to DAMM v2, creator fee claims and a mock-SKR tip using isolated task wallets. Hosted API/Cloudflare configuration, provider credentials, app-to-API recovery testing and physical trade testing remain prerequisites for the planned release. Supabase project `qsboauxywnuhitlpmojw` is connected: all three migrations are verified, 80 posts with 80 distinct markets are stored, with 62 visible in the active feed, and the local API has trading and the daily faucet enabled. The app preserves source attribution and uses reviewed portrait footage to fill the Seeker frame. Profile shows the live SKR balance above its stats. The owner confirmed physical Seeker login and a 1,000 mock SKR mint. Credentials stay in ignored local environment files. Provider imports remain disabled until their services are configured. See [devnet setup](docs/devnet-alpha.md).
+See [docs/acceptance.md](docs/acceptance.md) for verified checks and remaining release work. Separate live devnet rehearsals finalized buys, sells, graduation to DAMM v2, creator fee claims and a mock-SKR tip using isolated task wallets. The checked Vercel container and Cloudflare Stream/recovery Worker still need account deployment, followed by app-to-API recovery and physical trade testing. Supabase project `qsboauxywnuhitlpmojw` is connected: all four migrations are verified, 80 posts with 80 distinct markets are stored, with 62 visible in the active feed, and the local API has trading and the daily faucet enabled. The app preserves source attribution and uses reviewed portrait footage to fill the Seeker frame. Profile shows the live SKR balance above its stats. The owner confirmed physical Seeker login and a 1,000 mock SKR mint. Credentials stay in ignored local environment files. Provider imports remain disabled until their services are configured. See [devnet setup](docs/devnet-alpha.md).
 
 The upstream native and Meteora dependencies currently contain npm audit advisories. Do not force incompatible SDK downgrades to silence the report. Recheck and resolve or explicitly assess those advisories before release; this branch is not represented as production-ready.
 

@@ -33,7 +33,7 @@ test('ordinary Cloudflare uploads recover ready and failed terminal states', asy
     }),
   })
 
-  assert.deepEqual(result, { checked: 2, updated: 2, next: undefined })
+  assert.deepEqual(result, { checked: 2, updated: 2, failed: 0, next: undefined })
   assert.deepEqual(await repository.getPost(ready.id), {
     ...ready,
     status: 'ready',
@@ -64,7 +64,7 @@ test('upload recovery skips linked imports and isolates transient Stream failure
     },
   })
 
-  assert.deepEqual(result, { checked: 2, updated: 1, next: undefined })
+  assert.deepEqual(result, { checked: 2, updated: 1, failed: 1, next: undefined })
   assert.deepEqual(inspected, [unavailable.streamUid, ready.streamUid])
   assert.equal((await repository.getPost(unavailable.id))?.status, 'processing')
   assert.equal((await repository.getPost(ready.id))?.status, 'ready')
@@ -78,7 +78,7 @@ test('upload recovery leaves in-progress encoding unchanged', async () => {
   const result = await reconcilePendingUploads(repository, {
     inspectVideo: async () => ({ readyToStream: false, status: { state: 'inprogress' } }),
   })
-  assert.deepEqual(result, { checked: 1, updated: 0, next: undefined })
+  assert.deepEqual(result, { checked: 1, updated: 0, failed: 0, next: undefined })
   assert.equal((await repository.getPost(post.id))?.status, 'processing')
 })
 
@@ -93,7 +93,7 @@ test('upload recovery fails an abandoned direct upload after its URL expires', a
       uploadExpiry: '2025-12-31T23:59:59Z',
     }),
   })
-  assert.deepEqual(result, { checked: 1, updated: 1, next: undefined })
+  assert.deepEqual(result, { checked: 1, updated: 1, failed: 0, next: undefined })
   assert.equal((await repository.getPost(post.id))?.status, 'failed')
 })
 
@@ -116,4 +116,25 @@ test('upload recovery cursor prevents an old in-progress upload from starving la
 
   assert.equal(following.updated, 1)
   assert.equal((await repository.getPost(second.id))?.status, 'ready')
+})
+
+test('durable claims rotate recovery past a full page of older pending uploads', async () => {
+  const repository = new MemoryRepository(false)
+  const pending = Array.from({ length: 101 }, (_, index) => ({
+    ...processingPost(String(index).padStart(3, '0')),
+    createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+  }))
+  for (const post of pending) await repository.insertPost(post)
+  const target = pending.at(-1)!
+  const media = {
+    inspectVideo: async (uid: string) => ({
+      readyToStream: uid === target.streamUid,
+      status: { state: uid === target.streamUid ? 'ready' : 'inprogress' },
+    }),
+  }
+
+  for (let invocation = 0; invocation < 5; invocation++)
+    await reconcilePendingUploads(repository, media, 25, undefined, true)
+
+  assert.equal((await repository.getPost(target.id))?.status, 'ready')
 })

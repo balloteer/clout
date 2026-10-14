@@ -311,6 +311,66 @@ test('readiness fails closed and bounds repeated database probes', async () => {
   }
 })
 
+test('maintenance recovery is hidden when disabled and requires its exact platform secret', async () => {
+  const disabled = await fixture()
+  try {
+    assert.equal((await disabled.request('/v1/maintenance/reconcile', { method: 'POST' })).status, 404)
+  } finally {
+    await disabled.close()
+  }
+
+  let runs = 0
+  const secret = 'a'.repeat(64)
+  const enabled = await fixture(undefined, async () => ({
+    maintenanceSecret: secret,
+    maintenance: async () => {
+      runs++
+      return { ok: true, jobs: { transactions: 'ok', uploads: 'ok' } }
+    },
+  }))
+  try {
+    assert.equal(
+      (
+        await enabled.request('/v1/maintenance/reconcile', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer wrong-secret' },
+        })
+      ).status,
+      401,
+    )
+    const recovered = await enabled.request('/v1/maintenance/reconcile', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secret}` },
+    })
+    assert.equal(recovered.status, 200)
+    assert.deepEqual(recovered.data, {
+      ok: true,
+      jobs: { transactions: 'ok', uploads: 'ok' },
+    })
+    assert.equal(runs, 1)
+
+    const partial = await fixture(undefined, async () => ({
+      maintenanceSecret: secret,
+      maintenance: async () => ({ ok: false, jobs: { transactions: 'failed' } }),
+    }))
+    try {
+      assert.equal(
+        (
+          await partial.request('/v1/maintenance/reconcile', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${secret}` },
+          })
+        ).status,
+        503,
+      )
+    } finally {
+      await partial.close()
+    }
+  } finally {
+    await enabled.close()
+  }
+})
+
 test('HTTP feed and discover hydrate the visible batch without per-post creator requests', async () => {
   const batches: string[][] = []
   const app = await fixture(undefined, async (repository) => {

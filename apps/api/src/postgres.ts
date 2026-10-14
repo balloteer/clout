@@ -135,6 +135,24 @@ export class PostgresRepository implements Repository {
           order by created_at asc, id asc limit ${limit}`
     return rows.map((row) => row.data)
   }
+  async claimProcessingUploads(limit: number): Promise<Post[]> {
+    const rows = await this.sql`with candidates as (
+        select p.id
+        from public.posts p
+        left join private.upload_recovery_checks c on c.post_id = p.id
+        where p.status = 'processing' and p.stream_uid is not null and not (p.data ? 'source')
+        order by c.checked_at asc nulls first, p.created_at asc, p.id asc
+        for update of p skip locked
+        limit ${limit}
+      ), claimed as (
+        insert into private.upload_recovery_checks (post_id, checked_at)
+        select id, now() from candidates
+        on conflict (post_id) do update set checked_at = excluded.checked_at
+        returning post_id
+      )
+      select p.data from public.posts p join claimed c on c.post_id = p.id`
+    return rows.map((row) => row.data)
+  }
   async getPost(id: string): Promise<Post | null> {
     const [row] = await this.sql`select data from public.posts where id = ${id}`
     return row?.data ?? null

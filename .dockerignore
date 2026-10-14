@@ -1,5 +1,6 @@
 *
 !Dockerfile
+!Dockerfile.vercel
 !.dockerignore
 !package.json
 !package-lock.json

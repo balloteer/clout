@@ -163,17 +163,22 @@ export class FaucetService {
       throw new ApiError(404, 'CLAIM_NOT_FOUND', 'Mint request not found.')
     return publicFaucetClaim(claim)
   }
-  async resume() {
+  async resume(maxClaims = Number.POSITIVE_INFINITY) {
     let cursor: string | undefined
+    let checked = 0
+    let failed = 0
     for (;;) {
       const claims = await this.repository.listPendingClaims(this.campaign.id, cursor)
-      if (!claims.length) return
+      if (!claims.length) return { checked, failed }
       for (const claim of claims) {
+        checked++
         try {
           await processPayout(this.repository, this.transport, claim.id)
         } catch {
           /* Retry the same durable intent later, including requests from earlier UTC days. */
+          failed++
         }
+        if (checked >= maxClaims) return { checked, failed }
       }
       cursor = claims.at(-1)!.id
     }

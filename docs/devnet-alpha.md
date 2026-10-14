@@ -12,7 +12,7 @@ The app's sidebar, mobile menu and Profile expose **Mint mock SKR**. This faucet
 
 ## Connect persistent services
 
-The owner’s project `qsboauxywnuhitlpmojw` is connected. All three migrations are applied and verified, and the 80-post/80-market catalog is seeded (62 active posts and 18 archived picks). The local API runs in connected mode with trading and the daily faucet enabled. The preview at `http://localhost:8081` calls that API and preserves the bundled media and curated source attribution. This does not deploy the API or app publicly.
+The owner’s project `qsboauxywnuhitlpmojw` is connected. All four migrations are applied and verified, and the 80-post/80-market catalog is seeded (62 active posts and 18 archived picks). The local API runs in connected mode with trading and the daily faucet enabled. The preview at `http://localhost:8081` calls that API and preserves the bundled media and curated source attribution. This does not deploy the API or app publicly.
 
 Save the supplied project's session-pooler `DATABASE_URL` (port 5432) in ignored `apps/api/.env.local`. Do not paste its password into chat. Supabase’s official public CA is bundled and scoped to database TLS; hostname verification stays enabled. Setup commands accept only Supabase project `qsboauxywnuhitlpmojw`, enforce TLS and redact raw connection failures.
 

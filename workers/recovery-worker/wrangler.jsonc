@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "clout-devnet-recovery",
+  "main": "index.mjs",
+  "compatibility_date": "2026-10-13",
+  "secrets": {
+    "required": ["CLOUT_API_ORIGIN", "MAINTENANCE_SECRET"],
+  },
+  "triggers": {
+    "crons": ["* * * * *"],
+  },
+  "observability": {
+    "enabled": true,
+  },
+}

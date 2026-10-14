@@ -1,35 +1,33 @@
 # Judge release runbook
 
-The current `clout-preview.apk` is a USB preview. A judge-ready APK must point at a public HTTPS API. The API container in the repository is deployable without adding credentials to Git; Railway variables provide the runtime configuration.
+The current `clout-preview.apk` is a USB preview. A judge-ready APK must point at a public HTTPS API. Vercel builds the repository's `Dockerfile.vercel` as an autoscaling container Function; Supabase remains the durable database and Cloudflare Stream remains the durable video service.
 
-## 1. Deploy the API on Railway
+## 1. Deploy the API on Vercel
 
-1. Create a Railway service from the repository's `main` branch. Keep the service root at `/` because the API imports the shared `packages/markets` workspace and the root lockfile.
-2. Generate a public domain under **Settings → Networking**. Railway detects the root `Dockerfile`; if it does not, set `RAILWAY_DOCKERFILE_PATH=/Dockerfile`.
-3. Set the healthcheck path to `/ready`, timeout to 300 seconds, and restart policy to **On Failure** with 10 retries. The container already starts the API and listens on Railway's injected `PORT` at `0.0.0.0`. Readiness fails if the database cannot answer.
-4. Add the variables below. Seal database, RPC-provider, Cloudflare, OAuth, encryption, webhook and authority credentials. Do not paste any of them into build arguments, repository files, Expo variables or logs.
+1. Import `https://github.com/balloteer/clout` into Vercel and keep the project root at the repository root (`.`). The API imports the root lockfile, shared workspaces and bundled sample media.
+2. Select the **Container** preset if Vercel does not automatically detect `Dockerfile.vercel`. Do not set a build or output command. `vercel.json` keeps the Function in `sfo1`, close to the Supabase `us-west-2` pooler.
+3. Under **Settings → Environment Variables**, enable automatic System Environment Variables. The API derives its stable HTTPS identity origin from `VERCEL_PROJECT_PRODUCTION_URL`. A custom `CLOUT_ORIGIN` is needed only if that automatic value is deliberately disabled.
+4. Add the variables below to **Production**. Choose Vercel's **Secret** type for every credential named below. Disable automatic Preview deployments for this API unless you create an isolated connected Preview environment with its own database, origin and credentials; an unconfigured Preview intentionally fails closed. Never put server credentials in build arguments, Git, Expo variables or logs.
 
-Railway's legacy `railway.json` configuration is intentionally omitted. Railway deprecated Config as Code for new services and recommends dashboard settings or its Infrastructure as Code workflow. The checked Dockerfile remains the portable runtime definition.
+`Dockerfile.vercel` sets `NODE_ENV=production`, `HOST=0.0.0.0` and `CLOUT_TRUST_PROXY_HOPS=1`. Vercel injects `PORT` and replaces `x-forwarded-for` with the client IP. Do not override those values for the production project.
 
 ### Required for login, feed and trading
 
 ```dotenv
-NODE_ENV=production
 CLOUT_MODE=connected
-HOST=0.0.0.0
-CLOUT_ORIGIN=https://${{RAILWAY_PUBLIC_DOMAIN}}
-CLOUT_ALLOWED_ORIGINS=https://${{RAILWAY_PUBLIC_DOMAIN}}
-CLOUT_TRUST_PROXY_HOPS=0
 DATABASE_URL=<sealed Supabase server pooler URL>
 SOLANA_DEVNET_RPC_URL=<sealed devnet RPC URL>
 SKR_DEVNET_MINT=8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC
 SKR_DECIMALS=6
 METEORA_DBC_CONFIG=<devnet DBC configuration address>
+LOCAL_UPLOADS_ENABLED=false
+REWARDS_ENABLED=false
+MAINTENANCE_SECRET=<one stable 64-character hexadecimal secret>
 ```
 
-Railway supplies `PORT`; leave it unset. `DATABASE_URL` must use the Supabase server-side session/shared pooler on port 5432, with special characters in the password percent-encoded. The API validates the Supabase hostname and uses the pinned public Supabase CA.
+Generate `MAINTENANCE_SECRET` once with `openssl rand -hex 32`. Store the exact same value in Vercel and the Cloudflare recovery Worker. Set `DATABASE_URL`, `SOLANA_DEVNET_RPC_URL`, `MAINTENANCE_SECRET` and `FAUCET_MINT_AUTHORITY_SECRET_BASE64` to the **Secret** type. `DATABASE_URL` must use the Supabase server-side session/shared pooler on port 5432, with special characters in the password percent-encoded. The API uses a bounded connection pool and the pinned public Supabase CA.
 
-Keep `CLOUT_TRUST_PROXY_HOPS=0` for the initial deploy. This uses the direct socket address and ignores forwarded headers. Set a nonzero value only after verifying the exact fixed proxy chain in the deployed environment; the API rejects malformed or shorter chains rather than trusting a client-supplied address.
+Apply `supabase/migrations/20261013090000_upload_recovery_checks.sql` before enabling the recovery Worker. The safe helper is `node --env-file=apps/api/.env.local scripts/db-upload-recovery.mjs --apply`; it pins the existing Supabase project and verifies the private grants afterward. The migration adds the private fair-scheduling table used to rotate Stream checks across pending uploads.
 
 ### Required for the daily mock SKR faucet
 
@@ -44,39 +42,66 @@ FAUCET_MINT_AUTHORITY_SECRET_BASE64=<sealed 64-byte devnet authority key in base
 
 The authority must control the configured mock mint and have enough devnet SOL for transaction fees and recipient token-account rent. Keep the campaign ID and supply ceiling stable across redeploys. Never reuse a mainnet key.
 
-### Required for uploads
+## 2. Configure Cloudflare Stream
+
+Enable Stream and create an account token scoped to **Stream Write**. Add these values to the Vercel Production environment, then redeploy:
 
 ```dotenv
-LOCAL_UPLOADS_ENABLED=false
 CLOUDFLARE_ACCOUNT_ID=<account ID>
 CLOUDFLARE_STREAM_API_TOKEN=<sealed Stream-scoped token>
 CLOUDFLARE_STREAM_WEBHOOK_SECRET=<signing secret returned by the webhook API>
 ```
 
-Configure Cloudflare Stream to send signed callbacks to:
-
-```text
-https://${{RAILWAY_PUBLIC_DOMAIN}}/v1/webhooks/stream
-```
-
-Register that URL with `PUT /accounts/<ACCOUNT_ID>/stream/webhook`, then copy the response's `result.secret` into `CLOUDFLARE_STREAM_WEBHOOK_SECRET`. Updating the webhook URL rotates the secret, so update the Railway variable after every webhook change.
-
-Local uploads are intentionally refused in production. Linked X accounts additionally require `LINKED_ACCOUNTS_ENABLED=true`, X OAuth credentials, and a stable sealed `LINKED_ACCOUNTS_ENCRYPTION_KEY`. Leave linked accounts disabled for the judge build unless the complete provider flow has been exercised. Fomo remains unavailable.
-
-## 2. Verify the deployment
-
-Run these read-only checks against the generated domain:
+Set all three values to Vercel's **Secret** type. Register the production callback URL with this exact API request:
 
 ```sh
-export CLOUT_API_URL="https://YOUR-SERVICE.up.railway.app"
+export CLOUT_API_URL="https://YOUR-PROJECT.vercel.app"
+curl --fail --silent --show-error \
+  --request PUT \
+  --header "Authorization: Bearer $CLOUDFLARE_STREAM_API_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data "{\"notificationUrl\":\"$CLOUT_API_URL/v1/webhooks/stream\"}" \
+  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/stream/webhook" \
+  > /tmp/clout-stream-webhook.json
+```
+
+Read `/tmp/clout-stream-webhook.json` locally and copy its `result.secret` into the Vercel Secret `CLOUDFLARE_STREAM_WEBHOOK_SECRET`, then delete that temporary file. Updating the webhook URL rotates the secret, so update the Vercel variable and redeploy after every webhook change. Video bytes upload directly from the phone to Cloudflare's signed upload URL; they do not cross Vercel's Function request-body boundary.
+
+Local uploads are refused in production. Linked X accounts additionally require `LINKED_ACCOUNTS_ENABLED=true`, X OAuth credentials and a stable sealed `LINKED_ACCOUNTS_ENCRYPTION_KEY`. Leave linked accounts disabled for the judge build unless the complete provider flow has been exercised. Fomo remains unavailable.
+
+## 3. Deploy the Cloudflare recovery Worker
+
+Vercel containers scale to zero, so in-process timers are not the durable scheduler. The checked `workers/recovery-worker` calls the API's secret-protected, idempotent recovery endpoint once per minute. It reconciles pending devnet transactions, faucet mints, Stream uploads and enabled account imports.
+
+```sh
+cd workers/recovery-worker
+npm ci
+npx wrangler login
+umask 077
+cat > .dev.vars.production
+# Enter exactly two dotenv lines, then press Control-D:
+# CLOUT_API_ORIGIN=https://YOUR-PROJECT.vercel.app
+# MAINTENANCE_SECRET=<the exact Vercel value>
+npm run deploy -- --secrets-file .dev.vars.production
+rm .dev.vars.production
+```
+
+Wrangler is pinned by this directory's package lock, both required secrets are uploaded atomically with the first deployment, and the ignored temporary file never enters Git. The Worker exposes no public control route; HTTP requests return 404. Its Cron Trigger invokes `POST /v1/maintenance/reconcile` with the shared bearer secret. Check **Workers & Pages → clout-devnet-recovery → Triggers** and confirm the `* * * * *` schedule is active.
+
+## 4. Verify the deployment
+
+Run these read-only checks against the production domain:
+
+```sh
+export CLOUT_API_URL="https://YOUR-PROJECT.vercel.app"
 curl --fail --silent --show-error "$CLOUT_API_URL/live"
 curl --fail --silent --show-error "$CLOUT_API_URL/ready"
 curl --fail --silent --show-error "$CLOUT_API_URL/v1/config"
 ```
 
-`/live` must return `{"status":"ok"}`, `/ready` must return `{"status":"ready"}`, and `/v1/config` must report `mode: connected` and `network: devnet`. Before building the APK, confirm that `features.trading` and `features.faucet` are `true`; confirm `features.uploads` is `true` only after Cloudflare is configured. Exercise a feed request separately because a database connection does not prove the seeded catalog is present.
+`/live` must return `{"status":"ok"}`, `/ready` must return `{"status":"ready"}`, and `/v1/config` must report `mode: connected` and `network: devnet`. Confirm `features.trading`, `features.faucet` and `features.uploads` are `true`. Exercise a feed request separately because database connectivity does not prove the seeded catalog is present. Confirm the recovery Worker's latest Cron event succeeded.
 
-## 3. Build and install the portable APK
+## 5. Build and install the portable APK
 
 ```sh
 EXPO_PUBLIC_APP_IDENTITY_URI="$CLOUT_API_URL" \
@@ -87,18 +112,18 @@ bash scripts/android-env.sh .tooling/android-sdk/build-tools/36.0.0/apksigner \
   verify --print-certs artifacts/clout-preview.apk
 ```
 
-Take the SHA-256 certificate fingerprint from `apksigner`, then add these Railway variables and redeploy the same API:
+Take the SHA-256 certificate fingerprint from `apksigner`, add these Vercel Production variables, and redeploy the same API:
 
 ```dotenv
 ANDROID_APP_PACKAGE=app.clout.mobile
 ANDROID_APP_SHA256_CERT_FINGERPRINT=<exact fingerprint from the judge APK>
 ```
 
-Verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and that exact fingerprint, then install the already-built APK with `bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk`. The API origin is now the Mobile Wallet Adapter identity URI without a second website.
+Verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and that exact fingerprint. Install the already-built APK with `bash scripts/android-env.sh adb install -r artifacts/clout-preview.apk`. The API origin is now the Mobile Wallet Adapter identity URI without a second website.
 
 Confirm the APK bundle contains the HTTPS hostname and does not contain `127.0.0.1:8787`. Do not set `CLOUT_PREVIEW_USB=1`. The script refuses a connected portable build without the matching HTTPS identity origin. The preview remains signed by this machine's current debug key; retain this exact APK for judging and use a permanent production keystore for a dApp Store release.
 
-## 4. Judge acceptance on the exact APK
+## 6. Judge acceptance on the exact APK
 
 - Launch with the Mac disconnected and confirm the feed loads and audible playback starts.
 - Connect only the Seeker built-in wallet, close and reopen the app, and confirm the signed session restores.

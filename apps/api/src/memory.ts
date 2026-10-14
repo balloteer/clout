@@ -35,6 +35,8 @@ export class MemoryRepository implements Repository {
   readonly checkpoints = new Map<string, { signature: string; slot: number }>()
   readonly intents = new Map<string, TransactionIntent>()
   readonly quotes = new Map<string, Record<string, unknown>>()
+  private readonly uploadRecoveryChecks = new Map<string, number>()
+  private uploadRecoverySequence = 0
 
   constructor(
     seed = true,
@@ -117,6 +119,19 @@ export class MemoryRepository implements Repository {
           (post.createdAt === after.createdAt && post.id > after.id),
       )
       .slice(0, limit)
+  }
+  async claimProcessingUploads(limit: number) {
+    const posts = [...this.posts.values()]
+      .filter((post) => post.status === 'processing' && !!post.streamUid && post.source === undefined)
+      .sort(
+        (a, b) =>
+          (this.uploadRecoveryChecks.get(a.id) ?? -1) - (this.uploadRecoveryChecks.get(b.id) ?? -1) ||
+          a.createdAt.localeCompare(b.createdAt) ||
+          a.id.localeCompare(b.id),
+      )
+      .slice(0, limit)
+    for (const post of posts) this.uploadRecoveryChecks.set(post.id, this.uploadRecoverySequence++)
+    return posts
   }
   async getPost(id: string) {
     return this.posts.get(id) ?? null

@@ -44,40 +44,50 @@ export async function reconcilePendingUploads(
   media: Pick<MediaService, 'inspectVideo'>,
   limit = 25,
   after?: { createdAt: string; id: string },
+  claim = false,
 ) {
-  if (!media.inspectVideo) return { checked: 0, updated: 0, next: undefined }
-  const posts = await repository.listProcessingUploads(limit, after)
+  const inspectVideo = media.inspectVideo
+  if (!inspectVideo) return { checked: 0, updated: 0, failed: 0, next: undefined }
+  const posts = claim
+    ? await repository.claimProcessingUploads(limit)
+    : await repository.listProcessingUploads(limit, after)
   let updated = 0
-  for (const post of posts) {
-    if (!post.streamUid) continue
-    try {
-      const video = await media.inspectVideo(post.streamUid)
-      if (video.status.state === 'ready' && video.readyToStream) {
-        if (
-          await repository.updateStream(
-            post.streamUid,
-            'ready',
-            `https://videodelivery.net/${post.streamUid}/manifest/video.m3u8`,
-            `https://videodelivery.net/${post.streamUid}/thumbnails/thumbnail.jpg`,
-          )
-        )
-          updated++
-      } else if (
-        video.status.state === 'error' ||
-        (video.status.state === 'pendingupload' &&
-          !!video.uploadExpiry &&
-          Date.parse(video.uploadExpiry) <= Date.now())
-      ) {
-        if (await repository.updateStream(post.streamUid, 'failed', null, null)) updated++
-      }
-    } catch {
-      // A transient Stream read must not prevent the remaining durable uploads from recovering.
-    }
-  }
+  let failed = 0
+  for (let start = 0; start < posts.length; start += 5)
+    await Promise.all(
+      posts.slice(start, start + 5).map(async (post) => {
+        if (!post.streamUid) return
+        try {
+          const video = await inspectVideo(post.streamUid)
+          if (video.status.state === 'ready' && video.readyToStream) {
+            if (
+              await repository.updateStream(
+                post.streamUid,
+                'ready',
+                `https://videodelivery.net/${post.streamUid}/manifest/video.m3u8`,
+                `https://videodelivery.net/${post.streamUid}/thumbnails/thumbnail.jpg`,
+              )
+            )
+              updated++
+          } else if (
+            video.status.state === 'error' ||
+            (video.status.state === 'pendingupload' &&
+              !!video.uploadExpiry &&
+              Date.parse(video.uploadExpiry) <= Date.now())
+          ) {
+            if (await repository.updateStream(post.streamUid, 'failed', null, null)) updated++
+          }
+        } catch {
+          // A transient Stream read must not prevent the remaining durable uploads from recovering.
+          failed++
+        }
+      }),
+    )
   const last = posts.at(-1)
   return {
     checked: posts.length,
     updated,
+    failed,
     next: posts.length === limit && last ? { createdAt: last.createdAt, id: last.id } : undefined,
   }
 }

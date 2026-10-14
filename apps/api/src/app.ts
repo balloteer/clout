@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import {
   MarketError,
   type MarketService,
@@ -50,6 +50,8 @@ export interface AppOptions {
   linkedAccounts?: LinkedAccountService
   faucet?: FaucetService
   androidAppIdentity?: AndroidAppIdentity
+  maintenance?: () => Promise<{ ok: boolean; jobs: Record<string, string> }>
+  maintenanceSecret?: string
 }
 const text = (value: unknown, name: string, max = 280): string => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > max)
@@ -60,6 +62,13 @@ const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new ApiError(400, 'INVALID_BODY', 'A JSON object is required.')
   return value as Record<string, unknown>
+}
+const maintenanceAuthorized = (authorization: string | undefined, secret: string | undefined) => {
+  if (!secret || secret.length < 32 || !authorization?.startsWith('Bearer ')) return false
+  const supplied = authorization.slice(7)
+  const expectedHash = createHash('sha256').update(secret).digest()
+  const suppliedHash = createHash('sha256').update(supplied).digest()
+  return timingSafeEqual(expectedHash, suppliedHash)
 }
 async function readBody(request: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = []
@@ -258,6 +267,16 @@ export function createApp(options: AppOptions) {
       }
       if (await handleSampleMedia(request, response)) return
       if (options.media?.handleRequest && (await options.media.handleRequest(request, response))) return
+      if (method === 'POST' && route === '/v1/maintenance/reconcile') {
+        if (!options.maintenance || !options.maintenanceSecret)
+          throw new ApiError(404, 'NOT_FOUND', 'Route not found.')
+        limiter.check(`maintenance:${key}`, 5)
+        if (!maintenanceAuthorized(request.headers.authorization, options.maintenanceSecret))
+          throw new ApiError(401, 'INVALID_MAINTENANCE_AUTH', 'Maintenance authorization failed.')
+        const result = await options.maintenance()
+        send(result.ok ? 200 : 503, result)
+        return
+      }
       if (route.startsWith('/v1/auth/')) limiter.check(`auth:${key}`, 20)
       const session = await auth.session(request.headers.authorization)
       const requireWallet = () => {

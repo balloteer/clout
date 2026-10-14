@@ -13,18 +13,20 @@ import { TokenVault, XProvider } from './linked-provider.js'
 import { FaucetService } from './faucet.js'
 import { parseTrustProxyHops } from './request-ip.js'
 import { parseAndroidAppIdentity } from './app-identity.js'
+import { resolveAllowedOrigins, resolveOrigin, resolveTrustProxyHops } from './runtime-config.js'
 
 const env = process.env
 const connected = env.CLOUT_MODE === 'connected'
+const vercel = env.VERCEL === '1'
 if (env.NODE_ENV === 'production' && !connected) throw new Error('Production requires CLOUT_MODE=connected.')
 if (connected && !env.DATABASE_URL) throw new Error('Connected mode requires DATABASE_URL.')
 const repository = connected ? new PostgresRepository(env.DATABASE_URL!) : new MemoryRepository()
-const origin = env.CLOUT_ORIGIN ?? 'http://localhost:8787'
-if (env.NODE_ENV === 'production' && !origin.startsWith('https://'))
-  throw new Error('Production requires an HTTPS CLOUT_ORIGIN.')
-const allowedOrigins = (env.CLOUT_ALLOWED_ORIGINS ?? `${origin},http://localhost:8081`)
-  .split(',')
-  .map((value) => value.trim())
+const origin = resolveOrigin(env)
+const allowedOrigins = resolveAllowedOrigins(env, origin)
+if (env.MAINTENANCE_SECRET && env.MAINTENANCE_SECRET.length < 32)
+  throw new Error('MAINTENANCE_SECRET must contain at least 32 characters.')
+if (vercel && connected && !env.MAINTENANCE_SECRET)
+  throw new Error('Connected Vercel deployments require MAINTENANCE_SECRET for durable recovery.')
 const tradingConfigured = connected && !!env.SOLANA_DEVNET_RPC_URL && !!env.SKR_DEVNET_MINT
 const markets = tradingConfigured
   ? createMarketService(
@@ -88,18 +90,22 @@ if (env.LINKED_ACCOUNTS_ENABLED === 'true') {
   )
 }
 let importing = false
-const importTimer = linkedAccounts
-  ? setInterval(() => {
-      if (importing) return
-      importing = true
-      void linkedAccounts!
-        .run()
-        .catch(() => console.error('Linked imports temporarily unavailable.'))
-        .finally(() => {
-          importing = false
-        })
-    }, 60_000)
-  : undefined
+const importTimer =
+  !vercel && linkedAccounts
+    ? setInterval(() => {
+        if (importing) return
+        importing = true
+        void linkedAccounts!
+          .run()
+          .then((result) => {
+            if (result.failed) console.error('Some linked imports need recovery review.')
+          })
+          .catch(() => console.error('Linked imports temporarily unavailable.'))
+          .finally(() => {
+            importing = false
+          })
+      }, 60_000)
+    : undefined
 importTimer?.unref()
 const chain = tradingConfigured
   ? new Connection(env.SOLANA_DEVNET_RPC_URL!, {
@@ -160,26 +166,33 @@ if (env.FAUCET_ENABLED === 'true') {
   await faucet.initialize()
 }
 let minting = false
-const faucetTimer = faucet
-  ? setInterval(() => {
-      if (minting) return
-      minting = true
-      void faucet!
-        .resume()
-        .catch(() => console.error('Faucet recovery temporarily unavailable.'))
-        .finally(() => {
-          minting = false
-        })
-    }, 15000)
-  : undefined
+const faucetTimer =
+  !vercel && faucet
+    ? setInterval(() => {
+        if (minting) return
+        minting = true
+        void faucet!
+          .resume()
+          .then((result) => {
+            if (result.failed) console.error('Some faucet claims remain unrecovered.')
+          })
+          .catch(() => console.error('Faucet recovery temporarily unavailable.'))
+          .finally(() => {
+            minting = false
+          })
+      }, 15000)
+    : undefined
 faucetTimer?.unref()
 let reconciling = false
 const reconciliationTimer =
-  markets && chain
+  !vercel && markets && chain
     ? setInterval(() => {
         if (reconciling) return
         reconciling = true
         void reconcilePending(repository, markets, chain)
+          .then((result) => {
+            if (result.failed) console.error('Some transaction intents remain unreconciled.')
+          })
           .catch(() => console.error('Transaction reconciliation temporarily unavailable.'))
           .finally(() => {
             reconciling = false
@@ -195,6 +208,7 @@ const recoverUploads = () => {
     try {
       const result = await reconcilePendingUploads(repository, media, 25, uploadRecoveryCursor)
       uploadRecoveryCursor = result.next
+      if (result.failed) console.error('Some video uploads could not be inspected during recovery.')
     } catch {
       console.error('Video upload recovery temporarily unavailable.')
     } finally {
@@ -203,15 +217,70 @@ const recoverUploads = () => {
   })()
   return uploadRecoveryPromise
 }
-void recoverUploads()
-const uploadRecoveryTimer = media?.inspectVideo ? setInterval(() => void recoverUploads(), 60_000) : undefined
+if (!vercel) void recoverUploads()
+const uploadRecoveryTimer =
+  !vercel && media?.inspectVideo ? setInterval(() => void recoverUploads(), 60_000) : undefined
 uploadRecoveryTimer?.unref()
+let maintenancePromise: Promise<{ ok: boolean; jobs: Record<string, string> }> | undefined
+const runMaintenance = () => {
+  if (maintenancePromise) return maintenancePromise
+  maintenancePromise = (async () => {
+    const jobs: Array<[string, () => Promise<unknown>]> = []
+    if (linkedAccounts)
+      jobs.push([
+        'linkedAccounts',
+        async () => {
+          const result = await linkedAccounts.run(5)
+          if (result.failed) throw new Error('Linked-account recovery was incomplete.')
+        },
+      ])
+    if (faucet)
+      jobs.push([
+        'faucet',
+        async () => {
+          const result = await faucet.resume(2)
+          if (result.failed) throw new Error('Faucet recovery was incomplete.')
+        },
+      ])
+    if (markets && chain)
+      jobs.push([
+        'transactions',
+        async () => {
+          const result = await reconcilePending(repository, markets, chain)
+          if (result.failed) throw new Error('Transaction recovery was incomplete.')
+        },
+      ])
+    if (media?.inspectVideo)
+      jobs.push([
+        'uploads',
+        async () => {
+          const result = await reconcilePendingUploads(repository, media, 10, undefined, true)
+          if (result.failed) throw new Error('Upload recovery was incomplete.')
+        },
+      ])
+    const results = await Promise.allSettled(jobs.map(([, run]) => run()))
+    const statuses = Object.fromEntries(
+      jobs.map(([name], index) => [name, results[index].status === 'fulfilled' ? 'ok' : 'failed']),
+    )
+    const ok = results.every((result) => result.status === 'fulfilled')
+    if (!ok)
+      console.error('Maintenance recovery partially failed', {
+        jobs: Object.entries(statuses)
+          .filter(([, status]) => status === 'failed')
+          .map(([name]) => name),
+      })
+    return { ok, jobs: statuses }
+  })().finally(() => {
+    maintenancePromise = undefined
+  })
+  return maintenancePromise
+}
 const { server } = createApp({
   repository,
   origin,
   mode: connected ? 'connected' : 'demo',
   allowedOrigins,
-  trustProxyHops: parseTrustProxyHops(env.CLOUT_TRUST_PROXY_HOPS),
+  trustProxyHops: parseTrustProxyHops(resolveTrustProxyHops(env)),
   androidAppIdentity: parseAndroidAppIdentity(
     env.ANDROID_APP_SHA256_CERT_FINGERPRINT,
     env.ANDROID_APP_PACKAGE,
@@ -224,6 +293,8 @@ const { server } = createApp({
   quoteMint: tradingConfigured ? env.SKR_DEVNET_MINT : undefined,
   quoteDecimals: Number(env.SKR_DECIMALS ?? 6),
   chain,
+  maintenance: connected ? runMaintenance : undefined,
+  maintenanceSecret: env.MAINTENANCE_SECRET,
 })
 const port = Number(env.PORT ?? 8787)
 const host = env.HOST ?? '127.0.0.1'
@@ -244,6 +315,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
     server.close(() => {
       void (async () => {
         await uploadRecoveryPromise
+        await maintenancePromise
         await repository.close()
         process.exit(0)
       })()

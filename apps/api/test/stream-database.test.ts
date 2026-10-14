@@ -15,12 +15,17 @@ test('stream updates accept exact terminal retries without regressing the post',
   const repository = Object.create(PostgresRepository.prototype) as PostgresRepository
   Object.defineProperty(repository, 'sql', { value: sql })
   try {
-    await db.exec(`create table public.posts(
+    await db.exec(`create schema private;
+    create table public.posts(
       id text primary key,
       stream_uid text unique,
       status text not null,
       data jsonb not null,
       created_at timestamptz not null default now()
+    );
+    create table private.upload_recovery_checks(
+      post_id text primary key references public.posts(id) on delete cascade,
+      checked_at timestamptz not null
     )`)
     await db.query('insert into public.posts values ($1,$2,$3,$4)', [
       'post',
@@ -69,6 +74,15 @@ test('stream updates accept exact terminal retries without regressing the post',
       }),
       [],
     )
+    assert.deepEqual(
+      (await repository.claimProcessingUploads(1)).map((post) => post.id),
+      ['ordinary'],
+    )
+    const firstCheck = await db.query<{ checked_at: string }>(
+      'select checked_at from private.upload_recovery_checks where post_id=$1',
+      ['ordinary'],
+    )
+    assert.equal(firstCheck.rows.length, 1)
   } finally {
     await db.close()
   }

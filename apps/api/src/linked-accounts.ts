@@ -178,10 +178,13 @@ export class LinkedAccountService {
   change(wallet: string, id: string, action: 'pause' | 'resume' | 'disconnect') {
     return this.store.change(id, wallet, action)
   }
-  async run() {
-    for (const candidate of await this.store.list()) {
+  async run(maxAccounts = Number.POSITIVE_INFINITY) {
+    let checked = 0
+    let failed = 0
+    for (const candidate of (await this.store.list()).slice(0, maxAccounts)) {
       const account = await this.store.acquire(candidate.id, Date.now())
       if (!account?.leaseToken) continue
+      checked++
       const lease = account.leaseToken
       try {
         let tokens = this.vault.open<ProviderTokens>(account.tokens, tokenContext(account))
@@ -284,6 +287,7 @@ export class LinkedAccountService {
             })
             await this.store.bind(job.id, result.uid)
           } catch {
+            failed++
             await this.store.finish(job.id, 'needs_review')
             await this.store.save(account.id, lease, {
               lastError:
@@ -293,6 +297,7 @@ export class LinkedAccountService {
         }
         await this.store.save(account.id, lease, { nextPollAt: Date.now() + 5 * 60_000 })
       } catch (error) {
+        failed++
         await this.store.save(account.id, lease, {
           status:
             error instanceof ApiError && error.code === 'X_REAUTH_REQUIRED'
@@ -308,6 +313,7 @@ export class LinkedAccountService {
         await this.store.release(account.id, lease)
       }
     }
+    return { checked, failed }
   }
   // Called only after the existing Cloudflare signature check. It can recover a lost copy response.
   async webhook(input: Record<string, unknown>, uid: string): Promise<boolean> {
