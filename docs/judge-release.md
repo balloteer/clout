@@ -6,7 +6,7 @@ The current `clout-preview.apk` is a USB preview. A judge-ready APK must point a
 
 1. Create a Railway service from the repository's `main` branch. Keep the service root at `/` because the API imports the shared `packages/markets` workspace and the root lockfile.
 2. Generate a public domain under **Settings → Networking**. Railway detects the root `Dockerfile`; if it does not, set `RAILWAY_DOCKERFILE_PATH=/Dockerfile`.
-3. Set the healthcheck path to `/health`, timeout to 300 seconds, and restart policy to **On Failure** with 10 retries. The container already starts the API and listens on Railway's injected `PORT` at `0.0.0.0`.
+3. Set the healthcheck path to `/live`, timeout to 300 seconds, and restart policy to **On Failure** with 10 retries. The container already starts the API and listens on Railway's injected `PORT` at `0.0.0.0`.
 4. Add the variables below. Seal database, RPC-provider, Cloudflare, OAuth, encryption, webhook and authority credentials. Do not paste any of them into build arguments, repository files, Expo variables or logs.
 
 Railway's legacy `railway.json` configuration is intentionally omitted. Railway deprecated Config as Code for new services and recommends dashboard settings or its Infrastructure as Code workflow. The checked Dockerfile remains the portable runtime definition.
@@ -69,11 +69,11 @@ Run these read-only checks against the generated domain:
 
 ```sh
 export CLOUT_API_URL="https://YOUR-SERVICE.up.railway.app"
-curl --fail --silent --show-error "$CLOUT_API_URL/health"
+curl --fail --silent --show-error "$CLOUT_API_URL/live"
 curl --fail --silent --show-error "$CLOUT_API_URL/v1/config"
 ```
 
-Both responses must report `mode: connected` and `network: devnet`. Before building the APK, confirm that `features.trading` and `features.faucet` are `true`; confirm `features.uploads` is `true` only after Cloudflare is configured. A 200 health response proves the process is serving its configured runtime. Exercise a feed/database request separately because `/health` is a liveness check.
+`/live` must return `{"status":"ok"}`. `/v1/config` must report `mode: connected` and `network: devnet`. Before building the APK, confirm that `features.trading` and `features.faucet` are `true`; confirm `features.uploads` is `true` only after Cloudflare is configured. Exercise a feed request separately because liveness and configuration do not prove database readiness.
 
 Also verify `/.well-known/assetlinks.json` returns `app.clout.mobile` and the exact certificate fingerprint reported by `apksigner verify --print-certs`. The API origin can then be used as the Mobile Wallet Adapter identity URI without deploying a second website.
 

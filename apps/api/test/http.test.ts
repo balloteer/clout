@@ -277,6 +277,18 @@ test('serves Android Digital Asset Links for the configured judge APK', async ()
   }
 })
 
+test('container liveness does not depend on an external proxy forwarding chain', async () => {
+  const app = await fixture(undefined, async () => ({ trustProxyHops: 1 }))
+  try {
+    const live = await app.request('/live')
+    assert.equal(live.status, 200)
+    assert.deepEqual(live.data, { status: 'ok' })
+    assert.equal((await app.request('/v1/config')).status, 400)
+  } finally {
+    await app.close()
+  }
+})
+
 test('HTTP feed and discover hydrate the visible batch without per-post creator requests', async () => {
   const batches: string[][] = []
   const app = await fixture(undefined, async (repository) => {

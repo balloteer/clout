@@ -212,6 +212,11 @@ export function createApp(options: AppOptions) {
       const url = new URL(request.url ?? '/', options.origin)
       const route = url.pathname
       const method = request.method ?? 'GET'
+      // A container-local liveness probe must not depend on the external proxy chain.
+      if (method === 'GET' && route === '/live') {
+        send(200, { status: 'ok' })
+        return
+      }
       const key = requestClientIp(request, trustProxyHops)
       limiter.check(key, 180)
       if (

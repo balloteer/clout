@@ -16,7 +16,7 @@ test('production image is scoped to the API and runs as an unprivileged user', a
   assert.match(dockerfile, /--workspace @clout\/markets/)
   assert.match(dockerfile, /--workspace @clout\/shared/)
   assert.match(dockerfile, /USER node/)
-  assert.match(dockerfile, /\/health/)
+  assert.match(dockerfile, /\/live/)
   assert.match(dockerfile, /WORKDIR \/app\/apps\/api/)
   assert.match(dockerfile, /CLOUT_TRUST_PROXY_HOPS=0/)
   assert.match(dockerfile, /COPY apps\/mobile\/assets\/media apps\/mobile\/assets\/media/)
