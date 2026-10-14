@@ -144,6 +144,7 @@ export interface Repository {
   listPosts(options?: { includeHidden?: boolean }): Promise<Post[]>
   getPostSummaries(postIds: string[], wallet?: string): Promise<Record<string, PostSummary>>
   listOwnPosts(wallet: string): Promise<Post[]>
+  listProcessingUploads(limit: number, after?: { createdAt: string; id: string }): Promise<Post[]>
   getPost(id: string): Promise<Post | null>
   insertPost(post: Post): Promise<void>
   updateStream(

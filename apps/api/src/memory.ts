@@ -105,6 +105,18 @@ export class MemoryRepository implements Repository {
       .filter((post) => post.creatorWallet === wallet)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
+  async listProcessingUploads(limit: number, after?: { createdAt: string; id: string }) {
+    return [...this.posts.values()]
+      .filter((post) => post.status === 'processing' && !!post.streamUid && post.source === undefined)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+      .filter(
+        (post) =>
+          !after ||
+          post.createdAt > after.createdAt ||
+          (post.createdAt === after.createdAt && post.id > after.id),
+      )
+      .slice(0, limit)
+  }
   async getPost(id: string) {
     return this.posts.get(id) ?? null
   }

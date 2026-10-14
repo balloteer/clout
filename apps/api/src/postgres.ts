@@ -121,6 +121,17 @@ export class PostgresRepository implements Repository {
         .sql`select data from public.posts where creator_wallet = ${wallet} order by created_at desc limit 100`
     ).map((row) => row.data)
   }
+  async listProcessingUploads(limit: number, after?: { createdAt: string; id: string }): Promise<Post[]> {
+    const rows = after
+      ? await this.sql`select data from public.posts
+          where status = 'processing' and stream_uid is not null and not (data ? 'source')
+            and (created_at, id) > (${after.createdAt}::timestamptz, ${after.id})
+          order by created_at asc, id asc limit ${limit}`
+      : await this.sql`select data from public.posts
+          where status = 'processing' and stream_uid is not null and not (data ? 'source')
+          order by created_at asc, id asc limit ${limit}`
+    return rows.map((row) => row.data)
+  }
   async getPost(id: string): Promise<Post | null> {
     const [row] = await this.sql`select data from public.posts where id = ${id}`
     return row?.data ?? null

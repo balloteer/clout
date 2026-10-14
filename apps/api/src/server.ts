@@ -3,7 +3,7 @@ import { Connection } from '@solana/web3.js'
 import { createApp } from './app.js'
 import { MemoryRepository } from './memory.js'
 import { PostgresRepository } from './postgres.js'
-import { CloudflareMedia, type MediaService } from './media.js'
+import { CloudflareMedia, reconcilePendingUploads, type MediaService } from './media.js'
 import { LocalMedia } from './local-media.js'
 import { fileURLToPath } from 'node:url'
 import { reconcilePending } from './transactions.js'
@@ -185,6 +185,23 @@ const reconciliationTimer =
       }, 15000)
     : undefined
 reconciliationTimer?.unref()
+let recoveringUploads = false
+let uploadRecoveryCursor: { createdAt: string; id: string } | undefined
+const recoverUploads = async () => {
+  if (recoveringUploads || !media?.inspectVideo) return
+  recoveringUploads = true
+  try {
+    const result = await reconcilePendingUploads(repository, media, 25, uploadRecoveryCursor)
+    uploadRecoveryCursor = result.next
+  } catch {
+    console.error('Video upload recovery temporarily unavailable.')
+  } finally {
+    recoveringUploads = false
+  }
+}
+void recoverUploads()
+const uploadRecoveryTimer = media?.inspectVideo ? setInterval(() => void recoverUploads(), 60_000) : undefined
+uploadRecoveryTimer?.unref()
 const { server } = createApp({
   repository,
   origin,
@@ -209,6 +226,7 @@ server.listen(port, host, () =>
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.on(signal, () => {
     clearInterval(reconciliationTimer)
+    clearInterval(uploadRecoveryTimer)
     clearInterval(importTimer)
     clearInterval(faucetTimer)
     server.close(() => {
