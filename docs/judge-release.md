@@ -1,5 +1,7 @@
 # Judge release runbook
 
+> **Current zero-cost target:** Vercel paused the Hobby deployment after it exhausted Fluid Active CPU. Use the [Render Free release runbook](render-free-release.md) for the active judge backend and APK. The Vercel instructions below are retained only as the previous deployment record.
+
 The judge APK points at a public HTTPS API. Vercel builds the repository's `Dockerfile.vercel` as an autoscaling container Function; Supabase provides the durable database and video storage.
 
 ## 1. Deploy the API on Vercel
@@ -75,7 +77,7 @@ npm run deploy -- --secrets-file .dev.vars.production
 rm .dev.vars.production
 ```
 
-Wrangler is pinned by this directory's package lock, both required secrets are uploaded atomically with the first deployment, and the ignored temporary file never enters Git. The Worker exposes no public control route; HTTP requests return 404. Its Cron Trigger invokes `POST /v1/maintenance/reconcile` with the shared bearer secret. Check **Workers & Pages → clout-devnet-recovery → Triggers** and confirm the `* * * * *` schedule is active.
+Wrangler is pinned by this directory's package lock, both required secrets are uploaded atomically with the first deployment, and the ignored temporary file never enters Git. The Worker exposes no public control route; HTTP requests return 404. Its Cron Trigger invokes `POST /v1/maintenance/reconcile` with the shared bearer secret. Check **Workers & Pages → clout-devnet-recovery → Triggers** and confirm the `*/10 * * * *` schedule is active.
 
 ## 4. Verify the deployment
 

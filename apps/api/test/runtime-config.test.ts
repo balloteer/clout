@@ -29,10 +29,24 @@ test('explicit deployment settings override Vercel defaults', () => {
   assert.equal(resolveTrustProxyHops(env), '2')
 })
 
+test('Render production derives its HTTPS origin and one trusted platform hop', () => {
+  const env = {
+    NODE_ENV: 'production',
+    RENDER: 'true',
+    RENDER_EXTERNAL_URL: 'https://clout-api.onrender.com',
+  }
+  const origin = resolveOrigin(env)
+  assert.equal(origin, 'https://clout-api.onrender.com')
+  assert.deepEqual(resolveAllowedOrigins(env, origin), [origin])
+  assert.equal(resolveTrustProxyHops(env), '1')
+})
+
 test('production origin resolution fails closed on missing or malformed platform identity', () => {
   for (const env of [
     { NODE_ENV: 'production', VERCEL: '1' },
     { NODE_ENV: 'production', VERCEL: '1', VERCEL_PROJECT_PRODUCTION_URL: 'bad/path' },
+    { NODE_ENV: 'production', RENDER: 'true' },
+    { NODE_ENV: 'production', RENDER: 'true', RENDER_EXTERNAL_URL: 'http://clout-api.onrender.com' },
     { NODE_ENV: 'production', CLOUT_ORIGIN: 'http://clout.example' },
     { NODE_ENV: 'production', CLOUT_ORIGIN: 'https://user:secret@clout.example' },
     { NODE_ENV: 'production', CLOUT_ORIGIN: 'https://clout.example/path' },

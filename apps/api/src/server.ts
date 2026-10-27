@@ -20,6 +20,8 @@ import { SkrIdentityResolver } from './identity.js'
 const env = process.env
 const connected = env.CLOUT_MODE === 'connected'
 const vercel = env.VERCEL === '1'
+const render = env.RENDER === 'true'
+const externallyScheduledRecovery = vercel || render
 if (env.NODE_ENV === 'production' && !connected) throw new Error('Production requires CLOUT_MODE=connected.')
 if (connected && !env.DATABASE_URL) throw new Error('Connected mode requires DATABASE_URL.')
 const repository = connected ? new PostgresRepository(env.DATABASE_URL!) : new MemoryRepository()
@@ -27,8 +29,8 @@ const origin = resolveOrigin(env)
 const allowedOrigins = resolveAllowedOrigins(env, origin)
 if (env.MAINTENANCE_SECRET && env.MAINTENANCE_SECRET.length < 32)
   throw new Error('MAINTENANCE_SECRET must contain at least 32 characters.')
-if (vercel && connected && !env.MAINTENANCE_SECRET)
-  throw new Error('Connected Vercel deployments require MAINTENANCE_SECRET for durable recovery.')
+if (externallyScheduledRecovery && connected && !env.MAINTENANCE_SECRET)
+  throw new Error('Connected autoscaling deployments require MAINTENANCE_SECRET for durable recovery.')
 const tradingConfigured = connected && !!env.SOLANA_DEVNET_RPC_URL && !!env.SKR_DEVNET_MINT
 const markets = tradingConfigured
   ? createMarketService(
@@ -89,7 +91,7 @@ if (env.LINKED_ACCOUNTS_ENABLED === 'true') {
 }
 let importing = false
 const importTimer =
-  !vercel && linkedAccounts
+  !externallyScheduledRecovery && linkedAccounts
     ? setInterval(() => {
         if (importing) return
         importing = true
@@ -174,7 +176,7 @@ if (env.FAUCET_ENABLED === 'true') {
 }
 let minting = false
 const faucetTimer =
-  !vercel && faucet
+  !externallyScheduledRecovery && faucet
     ? setInterval(() => {
         if (minting) return
         minting = true
@@ -192,7 +194,7 @@ const faucetTimer =
 faucetTimer?.unref()
 let reconciling = false
 const reconciliationTimer =
-  !vercel && markets && chain
+  !externallyScheduledRecovery && markets && chain
     ? setInterval(() => {
         if (reconciling) return
         reconciling = true
@@ -224,9 +226,11 @@ const recoverUploads = () => {
   })()
   return uploadRecoveryPromise
 }
-if (!vercel) void recoverUploads()
+if (!externallyScheduledRecovery) void recoverUploads()
 const uploadRecoveryTimer =
-  !vercel && media?.inspectVideo ? setInterval(() => void recoverUploads(), 60_000) : undefined
+  !externallyScheduledRecovery && media?.inspectVideo
+    ? setInterval(() => void recoverUploads(), 60_000)
+    : undefined
 uploadRecoveryTimer?.unref()
 let maintenancePromise: Promise<{ ok: boolean; jobs: Record<string, string> }> | undefined
 const runMaintenance = () => {

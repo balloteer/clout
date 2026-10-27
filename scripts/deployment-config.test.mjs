@@ -85,7 +85,7 @@ test('Cloudflare recovery Worker is scheduled, pinned, secret-bound and has no p
     read('supabase/migrations/20261013090000_upload_recovery_checks.sql'),
     read('scripts/db-upload-recovery.mjs'),
   ])
-  assert.deepEqual(config.triggers.crons, ['* * * * *'])
+  assert.deepEqual(config.triggers.crons, ['*/10 * * * *'])
   assert.equal(config.main, 'index.mjs')
   assert.deepEqual(config.secrets.required, ['CLOUT_API_ORIGIN', 'MAINTENANCE_SECRET'])
   assert.match(workerPackage.devDependencies.wrangler, /^\d+\.\d+\.\d+$/)

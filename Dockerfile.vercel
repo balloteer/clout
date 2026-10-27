@@ -7,8 +7,8 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Vercel builds this file from the repository root so npm workspaces and the
-# bundled judge media remain available to the API container.
+# Cloud container platforms build this file from the repository root so npm
+# workspaces and the bundled judge media remain available to the API container.
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/markets/package.json packages/markets/package.json
@@ -32,5 +32,5 @@ COPY supabase/certs/prod-ca-2021.crt supabase/certs/prod-ca-2021.crt
 WORKDIR /app/apps/api
 USER node
 
-# Vercel injects PORT and routes every deployment request to this server.
+# The hosting platform injects PORT and routes deployment requests to this server.
 CMD ["node", "--import", "tsx", "src/server.ts"]

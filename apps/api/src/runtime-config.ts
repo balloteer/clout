@@ -15,7 +15,8 @@ export function resolveOrigin(env: NodeJS.ProcessEnv): string {
     !env.CLOUT_ORIGIN && env.VERCEL === '1'
       ? hostname(env.VERCEL_PROJECT_PRODUCTION_URL, 'VERCEL_PROJECT_PRODUCTION_URL')
       : undefined
-  const candidate = env.CLOUT_ORIGIN ?? (vercelHost ? `https://${vercelHost}` : undefined)
+  const renderOrigin = !env.CLOUT_ORIGIN && env.RENDER === 'true' ? env.RENDER_EXTERNAL_URL : undefined
+  const candidate = env.CLOUT_ORIGIN ?? (vercelHost ? `https://${vercelHost}` : renderOrigin)
   const origin = candidate ?? 'http://localhost:8787'
   let parsed: URL
   try {
@@ -53,5 +54,5 @@ export function resolveAllowedOrigins(env: NodeJS.ProcessEnv, origin: string): s
 }
 
 export function resolveTrustProxyHops(env: NodeJS.ProcessEnv): string | undefined {
-  return env.CLOUT_TRUST_PROXY_HOPS ?? (env.VERCEL === '1' ? '1' : undefined)
+  return env.CLOUT_TRUST_PROXY_HOPS ?? (env.VERCEL === '1' || env.RENDER === 'true' ? '1' : undefined)
 }

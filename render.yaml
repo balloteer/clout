@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: clout-api
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile.vercel
+    dockerContext: .
+    healthCheckPath: /live
+    envVars:
+      - key: CLOUT_MODE
+        value: connected
+      - key: DATABASE_URL
+        sync: false
+      - key: SOLANA_DEVNET_RPC_URL
+        sync: false
+      - key: SOLANA_MAINNET_IDENTITY_RPC_URL
+        value: https://api.mainnet-beta.solana.com
+      - key: SKR_DEVNET_MINT
+        value: 8sRfkBQg3u38JFZ36poZCuBeiytksTCKHHs3Kz4eiXmC
+      - key: SKR_DECIMALS
+        value: '6'
+      - key: METEORA_DBC_CONFIG
+        sync: false
+      - key: LOCAL_UPLOADS_ENABLED
+        value: 'false'
+      - key: REWARDS_ENABLED
+        value: 'false'
+      - key: LINKED_ACCOUNTS_ENABLED
+        value: 'false'
+      - key: MAINTENANCE_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        value: https://qsboauxywnuhitlpmojw.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_UPLOAD_BUCKET
+        value: clout-upload-staging
+      - key: SUPABASE_VIDEO_BUCKET
+        value: clout-videos
+      - key: FAUCET_ENABLED
+        value: 'true'
+      - key: FAUCET_CAMPAIGN_ID
+        sync: false
+      - key: FAUCET_AMOUNT_UNITS
+        value: '1000000000'
+      - key: FAUCET_MAX_DAILY_CLAIMS
+        value: '10000'
+      - key: FAUCET_MAX_SUPPLY_UNITS
+        value: '1000000000000000'
+      - key: FAUCET_MINT_AUTHORITY_SECRET_BASE64
+        sync: false
+      - key: ANDROID_APP_PACKAGE
+        value: app.clout.mobile
+      - key: ANDROID_APP_SHA256_CERT_FINGERPRINT
+        value: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
